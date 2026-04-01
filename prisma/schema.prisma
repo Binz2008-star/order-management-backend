@@ -25,6 +25,9 @@ model User {
   ownedSeller      Seller?       @relation("SellerOwner")
   staffMemberships SellerStaff[]
 
+  // Indexes for performance and constraints
+  @@index([email]) // For login lookups
+  @@index([isActive]) // For filtering active users
   @@map("users")
 }
 
@@ -47,8 +50,11 @@ model Seller {
   orders           Order[]
   notificationJobs NotificationJob[]
 
-  @@index([ownerUserId])
-  @@index([status])
+  // Critical indexes for performance and constraints
+  @@index([ownerUserId]) // For owner lookups
+  @@index([status]) // For filtering active sellers
+  @@index([slug]) // For public seller lookup (already unique but indexed)
+  @@index([createdAt]) // For sorting by creation date
   @@map("sellers")
 }
 
@@ -84,8 +90,12 @@ model Product {
   seller     Seller      @relation(fields: [sellerId], references: [id], onDelete: Cascade)
   orderItems OrderItem[]
 
-  @@unique([sellerId, slug])
-  @@index([sellerId, isActive])
+  // Critical constraints and indexes
+  @@unique([sellerId, slug]) // Business rule: unique slug per seller
+  @@index([sellerId, isActive]) // For active product listings
+  @@index([sellerId, createdAt]) // For product sorting
+  @@index([sellerId, name]) // For product search
+  @@index([isActive]) // For global active product filtering
   @@map("products")
 }
 
@@ -102,8 +112,11 @@ model Customer {
   seller Seller  @relation(fields: [sellerId], references: [id], onDelete: Cascade)
   orders Order[]
 
-  @@unique([sellerId, phone])
-  @@index([sellerId, phone])
+  // Critical constraints and indexes
+  @@unique([sellerId, phone]) // Business rule: unique phone per seller
+  @@index([sellerId, phone]) // For customer lookup by phone
+  @@index([sellerId, name]) // For customer search
+  @@index([phone]) // For global phone search if needed
   @@map("customers")
 }
 
@@ -132,8 +145,14 @@ model Order {
   paymentAttempts  PaymentAttempt[]
   notificationJobs NotificationJob[]
 
-  @@index([sellerId, createdAt])
-  @@index([sellerId, status, createdAt])
+  // Critical indexes for order management performance
+  @@index([sellerId, createdAt]) // For order listing by date
+  @@index([sellerId, status, createdAt]) // For filtering by status
+  @@index([sellerId, customerId]) // For customer order history
+  @@index([publicOrderNumber]) // For order lookup (already unique but indexed)
+  @@index([status]) // For global status filtering
+  @@index([paymentStatus]) // For payment status filtering
+  @@index([createdAt]) // For global order sorting
   @@map("orders")
 }
 
@@ -150,6 +169,10 @@ model OrderItem {
   order   Order   @relation(fields: [orderId], references: [id], onDelete: Cascade)
   product Product @relation(fields: [productId], references: [id], onDelete: Cascade)
 
+  // Critical indexes for order item operations
+  @@index([orderId]) // For order item lookup
+  @@index([productId]) // For product sales analytics
+  @@index([orderId, productId]) // For order item uniqueness checks
   @@map("order_items")
 }
 
@@ -164,7 +187,11 @@ model OrderEvent {
   // Relations
   order Order @relation(fields: [orderId], references: [id], onDelete: Cascade)
 
-  @@index([orderId, createdAt])
+  // Critical indexes for audit trail performance
+  @@index([orderId, createdAt]) // For order event timeline
+  @@index([eventType]) // For event type filtering
+  @@index([actorUserId]) // For user activity tracking
+  @@index([createdAt]) // For global event sorting
   @@map("order_events")
 }
 
@@ -186,7 +213,11 @@ model NotificationJob {
   seller Seller @relation(fields: [sellerId], references: [id], onDelete: Cascade)
   order  Order? @relation(fields: [orderId], references: [id], onDelete: Cascade)
 
-  @@index([status, scheduledAt])
+  // Critical indexes for notification queue performance
+  @@index([status, scheduledAt]) // For job queue processing
+  @@index([sellerId, status]) // For seller notification filtering
+  @@index([channel, status]) // For channel-specific processing
+  @@index([retryCount]) // For retry logic
   @@map("notification_jobs")
 }
 
