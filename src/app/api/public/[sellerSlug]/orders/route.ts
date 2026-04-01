@@ -1,14 +1,17 @@
-import { NextRequest, NextResponse } from 'next/server'
 import { prisma } from '@/server/db/prisma'
-import { withValidation, withParamsValidation, ApiError, handleApiError } from '@/server/lib/errors'
+import { ApiError, withParamsValidation, withValidation } from '@/server/lib/errors'
+import { generateRequestId, logger } from '@/server/lib/logger'
+import { RATE_LIMIT_CONFIGS, createRateLimit } from '@/server/lib/rate-limit-redis'
+import { calculateOrderTotal, generatePublicOrderNumber } from '@/server/lib/utils'
 import { CreateOrderSchema, SellerSlugSchema } from '@/server/lib/validation'
-import { generatePublicOrderNumber, calculateOrderTotal } from '@/server/lib/utils'
-import { logger, generateRequestId } from '@/server/lib/logger'
-import { createRateLimit } from '@/server/lib/rate-limit'
+import { NextRequest, NextResponse } from 'next/server'
 
+// Use production-ready Redis rate limiting for order creation
 const rateLimit = createRateLimit({
-  windowMs: 15 * 60 * 1000, // 15 minutes
+  ...RATE_LIMIT_CONFIGS.ORDER_CREATION,
+  windowMs: 15 * 60 * 1000, // 15 minutes (more restrictive for public API)
   maxRequests: 10, // 10 orders per 15 minutes per IP
+  redisKeyPrefix: 'public_order_creation',
 })
 
 async function createOrder(
@@ -195,7 +198,7 @@ async function createOrder(
 
 export const POST = withParamsValidation(
   SellerSlugSchema,
-  (params, request) => 
+  (params, request) =>
     withValidation(CreateOrderSchema, (orderData, req) =>
       createOrder(params, orderData, req)
     )(request)

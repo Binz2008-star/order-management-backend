@@ -1,6 +1,7 @@
-import { NextRequest, NextResponse } from 'next/server'
 import { authenticateUser } from '@/server/lib/auth'
-import { withValidation, ApiError } from '@/server/lib/errors'
+import { ApiError, withValidation } from '@/server/lib/errors'
+import { RATE_LIMIT_CONFIGS, createRateLimit } from '@/server/lib/rate-limit-redis'
+import { NextRequest, NextResponse } from 'next/server'
 import { z } from 'zod'
 
 const LoginSchema = z.object({
@@ -8,8 +9,17 @@ const LoginSchema = z.object({
   password: z.string().min(1, 'Password is required'),
 })
 
-async function login(loginData: any, request: NextRequest) {
-  const { email, password } = loginData
+// Apply strict rate limiting to auth endpoints
+const rateLimit = createRateLimit(RATE_LIMIT_CONFIGS.AUTH)
+
+async function login(loginData: unknown, request: NextRequest) {
+  // Rate limiting first
+  const rateLimitResult = await rateLimit(request)
+  if (!rateLimitResult.success) {
+    throw new ApiError(429, 'Too many login attempts')
+  }
+
+  const { email, password } = loginData as { email: string; password: string }
 
   try {
     const { user, token } = await authenticateUser(email, password)
