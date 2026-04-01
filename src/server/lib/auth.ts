@@ -1,10 +1,14 @@
-import jwt from 'jsonwebtoken'
 import bcrypt from 'bcryptjs'
+import jwt from 'jsonwebtoken'
 import { NextRequest } from 'next/server'
 import { prisma } from '../db/prisma'
 import { ApiError } from './errors'
 
-const JWT_SECRET = process.env.JWT_SECRET || 'fallback-secret-change-in-production'
+const JWT_SECRET = process.env.JWT_SECRET
+
+if (!JWT_SECRET) {
+  throw new Error('JWT_SECRET environment variable is required')
+}
 
 export interface AuthUser {
   id: string
@@ -65,10 +69,12 @@ export async function authenticateUser(email: string, password: string): Promise
     throw new ApiError(401, 'Invalid credentials')
   }
 
-  // For demo purposes, we'll assume password is stored in a separate field
-  // In production, you'd have a password field in the users table
-  const isValidPassword = await verifyPassword(password, 'hashed_password_placeholder')
-  
+  if (!user.passwordHash) {
+    throw new ApiError(500, 'User password not set')
+  }
+
+  const isValidPassword = await verifyPassword(password, user.passwordHash)
+
   if (!isValidPassword) {
     throw new ApiError(401, 'Invalid credentials')
   }
@@ -87,7 +93,7 @@ export async function authenticateUser(email: string, password: string): Promise
 
 export async function getCurrentUser(request: NextRequest): Promise<AuthUser> {
   const authHeader = request.headers.get('authorization')
-  
+
   if (!authHeader || !authHeader.startsWith('Bearer ')) {
     throw new ApiError(401, 'No token provided')
   }
@@ -100,7 +106,7 @@ export function requireSeller(user: AuthUser): void {
   if (user.role !== 'SELLER' && user.role !== 'ADMIN') {
     throw new ApiError(403, 'Seller access required')
   }
-  
+
   if (!user.sellerId) {
     throw new ApiError(403, 'No seller associated with account')
   }

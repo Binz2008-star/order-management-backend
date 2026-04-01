@@ -1,6 +1,6 @@
 # Order Management Backend
 
-A production-ready backend for TikTok/Instagram seller order management system built with Next.js App Router, Prisma, and SQLite.
+A backend for TikTok/Instagram seller order management system built with Next.js App Router, Prisma, and SQLite. **This is a development template - additional security and production hardening required for production use.**
 
 ## Features
 
@@ -179,6 +179,29 @@ src/
 - **Webhook Verification**: Signature verification for webhooks
 - **Audit Trail**: Complete order event history
 - **Idempotency**: Safe retry handling for payments/webhooks
+
+## Production Readiness
+
+### ✅ Implemented
+
+- JWT-based authentication with secure password hashing
+- Order status transition enforcement
+- Database constraints and indexes
+- Audit trail for order changes
+- Input validation with Zod schemas
+- Webhook deduplication
+
+### ⚠️ Production Hardening Required
+
+- **Database**: Replace SQLite with PostgreSQL for production
+- **Environment Variables**: Ensure all secrets are properly configured
+- **Rate Limiting**: Implement more sophisticated rate limiting
+- **Monitoring**: Add application performance monitoring
+- **Logging**: Enhanced structured logging for production
+- **Error Handling**: Global error handling and reporting
+- **Security**: Add CSRF protection, security headers
+- **Testing**: Comprehensive test suite before production
+- **CI/CD**: Automated testing and deployment pipelines
 
 ## Production Deployment
 
