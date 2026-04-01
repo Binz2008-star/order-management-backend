@@ -7,6 +7,7 @@ import {
   isTerminalOrderStatus,
   isValidOrderTransition
 } from '../modules/orders/transitions'
+import { OrderEventService } from './order-event.service'
 
 type OrderStatusType = typeof OrderStatus[keyof typeof OrderStatus]
 
@@ -115,17 +116,18 @@ export class OrderService {
         data: orderItemsWithOrderId
       })
 
-      // Log order creation event
-      await this.createOrderEvent(tx, {
+      // Log order creation event using centralized service
+      await OrderEventService.createEvent(tx, {
         orderId: order.id,
         actorUserId: null, // System created
-        eventType: 'ORDER_CREATED',
+        eventType: OrderEventService.EVENT_TYPES.ORDER_CREATED,
         payload: {
           publicOrderNumber,
           itemCount: orderItems.length,
           subtotalMinor,
-          currency: data.currency
-        }
+          currency: data.currency,
+          paymentType: data.paymentType,
+        },
       })
 
       logger.info('Order created successfully', {
@@ -176,18 +178,15 @@ export class OrderService {
         }
       })
 
-      // Log status change event
-      await this.createOrderEvent(tx, {
+      // Log status change event using centralized service
+      await OrderEventService.createStatusChangeEvent(
+        tx,
         orderId,
         actorUserId,
-        eventType: 'STATUS_CHANGED',
-        payload: {
-          from: currentOrder.status,
-          to: newStatus,
-          reason: reason || null,
-          timestamp: new Date().toISOString()
-        }
-      })
+        currentOrder.status,
+        newStatus,
+        reason
+      )
 
       // Handle post-transition actions
       await this.handlePostTransitionActions(tx, updatedOrder, currentOrder.status, newStatus)
@@ -238,7 +237,7 @@ export class OrderService {
         throw new Error('Cannot cancel order in terminal state')
       }
 
-      // Restock items
+      // Restock items and log stock events
       for (const item of order.orderItems) {
         await tx.product.update({
           where: { id: item.productId },
@@ -247,6 +246,14 @@ export class OrderService {
               increment: item.quantity
             }
           }
+        })
+
+        // Log stock release event
+        await OrderEventService.createStockEvent(tx, order.id, null, OrderEventService.EVENT_TYPES.STOCK_RELEASED, {
+          productId: item.productId,
+          productName: item.productNameSnapshot,
+          quantity: item.quantity,
+          reason: 'Order cancellation',
         })
       }
     }
@@ -283,36 +290,13 @@ export class OrderService {
         data: { paymentStatus: 'PAID' }
       })
 
-      await this.createOrderEvent(tx, {
-        orderId: order.id,
-        actorUserId: null,
-        eventType: 'PAYMENT_COMPLETED',
-        payload: {
-          paymentType: order.paymentType,
-          amountMinor: order.totalMinor,
-          currency: order.currency
-        }
+      // Log payment completion event
+      await OrderEventService.createPaymentEvent(tx, order.id, null, OrderEventService.EVENT_TYPES.PAYMENT_CONFIRMED, {
+        provider: 'CASH_ON_DELIVERY',
+        amountMinor: order.totalMinor,
+        currency: order.currency,
       })
     }
-  }
-
-  private async createOrderEvent(
-    tx: Prisma.TransactionClient,
-    data: {
-      orderId: string
-      actorUserId: string | null
-      eventType: string
-      payload: any
-    }
-  ) {
-    await tx.orderEvent.create({
-      data: {
-        orderId: data.orderId,
-        actorUserId: data.actorUserId,
-        eventType: data.eventType,
-        payloadJson: JSON.stringify(data.payload)
-      }
-    })
   }
 
   async getOrderById(orderId: string, sellerId: string) {
