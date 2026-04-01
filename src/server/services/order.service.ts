@@ -119,7 +119,7 @@ export class OrderService {
       // Log order creation event using centralized service
       await OrderEventService.createEvent(tx, {
         orderId: order.id,
-        actorUserId: null, // System created
+        actorUserId: 'SYSTEM', // System created
         eventType: OrderEventService.EVENT_TYPES.ORDER_CREATED,
         payload: {
           publicOrderNumber,
@@ -127,6 +127,8 @@ export class OrderService {
           subtotalMinor,
           currency: data.currency,
           paymentType: data.paymentType,
+          actor: 'SYSTEM',
+          timestamp: new Date().toISOString(),
         },
       })
 
@@ -182,7 +184,7 @@ export class OrderService {
       await OrderEventService.createStatusChangeEvent(
         tx,
         orderId,
-        actorUserId,
+        'SYSTEM', // System action
         currentOrder.status,
         newStatus,
         reason
@@ -248,13 +250,19 @@ export class OrderService {
           }
         })
 
-        // Log stock release event
-        await OrderEventService.createStockEvent(tx, order.id, null, OrderEventService.EVENT_TYPES.STOCK_RELEASED, {
-          productId: item.productId,
-          productName: item.productNameSnapshot,
-          quantity: item.quantity,
-          reason: 'Order cancellation',
-        })
+        // Log stock restoration event
+        await OrderEventService.createStockEvent(
+          tx,
+          order.id,
+          'SYSTEM', // System action
+          OrderEventService.EVENT_TYPES.STOCK_RELEASED,
+          {
+            productId: item.productId,
+            productName: item.product?.name || 'Unknown',
+            quantity: item.quantity,
+            reason: 'Order cancelled - stock released'
+          }
+        )
       }
     }
 
@@ -290,12 +298,18 @@ export class OrderService {
         data: { paymentStatus: 'PAID' }
       })
 
-      // Log payment completion event
-      await OrderEventService.createPaymentEvent(tx, order.id, null, OrderEventService.EVENT_TYPES.PAYMENT_CONFIRMED, {
-        provider: 'CASH_ON_DELIVERY',
-        amountMinor: order.totalMinor,
-        currency: order.currency,
-      })
+      // Log payment confirmation event
+      await OrderEventService.createPaymentEvent(
+        tx,
+        order.id,
+        'SYSTEM', // System action
+        OrderEventService.EVENT_TYPES.PAYMENT_CONFIRMED,
+        {
+          provider: 'cash_on_delivery',
+          amountMinor: order.totalMinor,
+          currency: order.currency,
+        }
+      )
     }
   }
 

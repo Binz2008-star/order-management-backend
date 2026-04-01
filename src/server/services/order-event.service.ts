@@ -3,9 +3,9 @@ import { logger } from '../lib/logger'
 
 export interface OrderEventData {
   orderId: string
-  actorUserId: string | null
+  actorUserId: string | 'SYSTEM' // Never null - always track who did what
   eventType: string
-  payload?: Record<string, any>
+  payload?: Record<string, unknown>
 }
 
 export class OrderEventService {
@@ -66,24 +66,24 @@ export class OrderEventService {
     ORDER_PACKED: 'ORDER_PACKED',
     ORDER_OUT_FOR_DELIVERY: 'ORDER_OUT_FOR_DELIVERY',
     ORDER_DELIVERED: 'ORDER_DELIVERED',
-    
+
     // Payment events
     PAYMENT_INITIATED: 'PAYMENT_INITIATED',
     PAYMENT_CONFIRMED: 'PAYMENT_CONFIRMED',
     PAYMENT_FAILED: 'PAYMENT_FAILED',
     PAYMENT_REFUNDED: 'PAYMENT_REFUNDED',
     PAYMENT_PARTIALLY_REFUNDED: 'PAYMENT_PARTIALLY_REFUNDED',
-    
+
     // Stock events
     STOCK_RESERVED: 'STOCK_RESERVED',
     STOCK_RELEASED: 'STOCK_RELEASED',
     STOCK_ADJUSTED: 'STOCK_ADJUSTED',
-    
+
     // Notification events
     NOTIFICATION_QUEUED: 'NOTIFICATION_QUEUED',
     NOTIFICATION_SENT: 'NOTIFICATION_SENT',
     NOTIFICATION_FAILED: 'NOTIFICATION_FAILED',
-    
+
     // System events
     STATUS_CHANGED: 'STATUS_CHANGED',
     ORDER_UPDATED: 'ORDER_UPDATED',
@@ -96,7 +96,7 @@ export class OrderEventService {
   static async createStatusChangeEvent(
     tx: Prisma.TransactionClient,
     orderId: string,
-    actorUserId: string | null,
+    actorUserId: string | 'SYSTEM',
     fromStatus: string,
     toStatus: string,
     reason?: string
@@ -109,6 +109,7 @@ export class OrderEventService {
         from: fromStatus,
         to: toStatus,
         reason: reason || null,
+        actor: actorUserId,
         timestamp: new Date().toISOString(),
       },
     })
@@ -120,7 +121,7 @@ export class OrderEventService {
   static async createPaymentEvent(
     tx: Prisma.TransactionClient,
     orderId: string,
-    actorUserId: string | null,
+    actorUserId: string | 'SYSTEM',
     eventType: string,
     paymentData: {
       provider: string
@@ -136,6 +137,7 @@ export class OrderEventService {
       eventType,
       payload: {
         ...paymentData,
+        actor: actorUserId,
         timestamp: new Date().toISOString(),
       },
     })
@@ -147,7 +149,7 @@ export class OrderEventService {
   static async createStockEvent(
     tx: Prisma.TransactionClient,
     orderId: string,
-    actorUserId: string | null,
+    actorUserId: string | 'SYSTEM',
     eventType: string,
     stockData: {
       productId: string
@@ -162,6 +164,7 @@ export class OrderEventService {
       eventType,
       payload: {
         ...stockData,
+        actor: actorUserId,
         timestamp: new Date().toISOString(),
       },
     })

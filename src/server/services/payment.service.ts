@@ -91,7 +91,7 @@ export class PaymentService {
       })
 
       // Log payment initiation event
-      await OrderEventService.createPaymentEvent(tx, data.orderId, actorUserId || null, OrderEventService.EVENT_TYPES.PAYMENT_INITIATED, {
+      await OrderEventService.createPaymentEvent(tx, data.orderId, actorUserId || 'SYSTEM', OrderEventService.EVENT_TYPES.PAYMENT_INITIATED, {
         provider: data.provider,
         amountMinor: data.amountMinor,
         currency: data.currency,
@@ -145,7 +145,7 @@ export class PaymentService {
 
       // Create appropriate payment event
       const eventType = this.getPaymentEventType(data.status)
-      await OrderEventService.createPaymentEvent(tx, currentAttempt.orderId, actorUserId || null, eventType, {
+      await OrderEventService.createPaymentEvent(tx, currentAttempt.orderId, actorUserId || 'SYSTEM', eventType, {
         provider: currentAttempt.provider,
         amountMinor: currentAttempt.amountMinor,
         currency: currentAttempt.currency,
@@ -222,7 +222,7 @@ export class PaymentService {
       })
 
       // Log refund event
-      await OrderEventService.createPaymentEvent(tx, paymentAttempt.orderId, actorUserId || null, OrderEventService.EVENT_TYPES.PAYMENT_REFUNDED, {
+      await OrderEventService.createPaymentEvent(tx, paymentAttempt.orderId, actorUserId || 'SYSTEM', OrderEventService.EVENT_TYPES.PAYMENT_REFUNDED, {
         provider: paymentAttempt.provider,
         amountMinor: data.refundAmountMinor,
         currency: paymentAttempt.currency,
@@ -304,7 +304,7 @@ export class PaymentService {
       await OrderEventService.createStatusChangeEvent(
         tx,
         orderId,
-        actorUserId || null,
+        actorUserId || 'SYSTEM',
         'PENDING',
         'CONFIRMED',
         'Payment completed'
