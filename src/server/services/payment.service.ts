@@ -67,6 +67,11 @@ export class PaymentService {
         throw new Error('Order not found')
       }
 
+      // REJECT payment attempts for COD orders
+      if (order.paymentType === 'CASH_ON_DELIVERY') {
+        throw new Error('Payment attempts not allowed for Cash on Delivery orders')
+      }
+
       // Check for existing pending payment attempts for this order
       const existingPending = order.paymentAttempts.find(
         attempt => attempt.status === 'PENDING' || attempt.status === 'PROCESSING'
