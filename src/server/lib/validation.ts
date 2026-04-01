@@ -1,14 +1,13 @@
 import { z } from 'zod'
 
 export const CreateOrderSchema = z.object({
-  customerName: z.string().min(1, 'Customer name is required'),
-  customerPhone: z.string().min(1, 'Customer phone is required'),
-  customerAddress: z.string().optional(),
+  customerId: z.string(),
   items: z.array(z.object({
     productId: z.string(),
-    quantity: z.number().min(1, 'Quantity must be at least 1'),
-  })).min(1, 'At least one item is required'),
-  notes: z.string().optional(),
+    quantity: z.number().min(1)
+  })),
+  paymentType: z.enum(['PREPAID', 'CASH_ON_DELIVERY']),
+  deliveryAddress: z.string()
 })
 
 export const CreateProductSchema = z.object({
