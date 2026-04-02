@@ -38,11 +38,11 @@ async function updatePaymentStatus(
 
 export async function PUT(
   request: NextRequest,
-  { params }: { params: Promise<{ id: string }> }
+  { params }: { params: Promise<{ paymentAttemptId: string }> }
 ) {
   try {
-    const { id } = await params
-    return updatePaymentStatus({ paymentAttemptId: id }, request)
+    const { paymentAttemptId } = await params
+    return updatePaymentStatus({ paymentAttemptId }, request)
   } catch (_error) {
     return NextResponse.json(
       { error: 'Invalid parameters' },

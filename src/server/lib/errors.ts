@@ -15,7 +15,7 @@ export class ApiError extends Error {
 type RouteHandler<T> = (data: T, request: NextRequest) => Promise<NextResponse>
 
 type RouteContext<T> = {
-  params: T
+  params: Promise<T>
 }
 
 function formatZodError(error: ZodError) {
@@ -79,7 +79,7 @@ export function withParamsValidation<T>(
     context: RouteContext<unknown>
   ): Promise<NextResponse> => {
     try {
-      const data = schema.parse(context.params)
+      const data = schema.parse(await context.params)
       return await handler(data, request)
     } catch (error) {
       return handleApiError(error)

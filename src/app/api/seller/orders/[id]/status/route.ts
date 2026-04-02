@@ -1,7 +1,7 @@
 import { prisma } from '@/server/db/prisma'
 import { getCurrentUser, requireSeller } from '@/server/lib/auth'
 import { ApiError, handleApiError } from '@/server/lib/errors'
-import { IdSchema, UpdateOrderStatusSchema } from '@/server/lib/validation'
+import { UpdateOrderStatusSchema } from '@/server/lib/validation'
 import { OrderTransitionError } from '@/server/modules/orders/transitions'
 import { orderService } from '@/server/services/order.service'
 import { NextRequest, NextResponse } from 'next/server'
@@ -18,10 +18,10 @@ function isOrderTransitionError(error: unknown): error is OrderTransitionError {
 
 export async function PATCH(
   request: NextRequest,
-  context: { params: unknown }
+  { params }: { params: Promise<{ id: string }> }
 ): Promise<NextResponse> {
   try {
-    const { id } = IdSchema.parse(context.params)
+    const { id } = await params
     const { status, reason } = UpdateOrderStatusSchema.parse(await request.json())
 
     const user = await getCurrentUser(request)
