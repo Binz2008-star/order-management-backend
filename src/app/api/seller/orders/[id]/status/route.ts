@@ -18,10 +18,10 @@ function isOrderTransitionError(error: unknown): error is OrderTransitionError {
 
 export async function PATCH(
   request: NextRequest,
-  context: { params: unknown }
+  context: { params: Promise<{ id: string }> }
 ): Promise<NextResponse> {
   try {
-    const { id } = IdSchema.parse(context.params)
+    const { id } = IdSchema.parse(await context.params)
     const { status, reason } = UpdateOrderStatusSchema.parse(await request.json())
 
     const user = await getCurrentUser(request)
