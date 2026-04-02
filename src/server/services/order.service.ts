@@ -139,6 +139,30 @@ export class OrderService {
     })
   }
 
+  /**
+   * Applies an order status transition within an existing transaction.
+   * This is the single authoritative path for all order status changes —
+   * validates via the state machine, updates the row, and emits the event.
+   * Use this from payment or any other service that needs to drive an
+   * order transition inside its own transaction.
+   */
+  static async applyTransitionInTx(
+    tx: Prisma.TransactionClient,
+    orderId: string,
+    newStatus: OrderStatusType,
+    actorUserId: string | null,
+    reason?: string
+  ): Promise<void> {
+    const order = await tx.order.findUnique({ where: { id: orderId } })
+    if (!order) throw new Error('Order not found')
+    const currentStatus = order.status as OrderStatusType
+    if (!isValidOrderTransition(currentStatus, newStatus)) {
+      throw new OrderTransitionError(currentStatus, newStatus)
+    }
+    await tx.order.update({ where: { id: orderId }, data: { status: newStatus } })
+    await OrderEventService.createStatusChangeEvent(tx, orderId, actorUserId, currentStatus, newStatus, reason)
+  }
+
   async updateOrderStatus(data: UpdateOrderStatusData) {
     const { orderId, newStatus, actorUserId, reason } = data
 

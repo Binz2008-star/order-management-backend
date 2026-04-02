@@ -2,6 +2,7 @@ import { Prisma } from '@prisma/client'
 import { prisma } from '../db/prisma'
 import { logger } from '../lib/logger'
 import { OrderEventService } from './order-event.service'
+import { OrderService } from './order.service'
 
 export interface CreatePaymentAttemptData {
   orderId: string
@@ -288,27 +289,11 @@ export class PaymentService {
       data: { paymentStatus: 'PAID' }
     })
 
-    // If order is still PENDING, confirm it
-    const order = await tx.order.findUnique({
-      where: { id: orderId }
-    })
-
+    // If order is still PENDING, confirm it — routed through the state machine
+    // so an order that has already advanced (PACKED, etc.) is never regressed
+    const order = await tx.order.findUnique({ where: { id: orderId } })
     if (order && order.status === 'PENDING') {
-      // Update order status to CONFIRMED directly
-      await tx.order.update({
-        where: { id: orderId },
-        data: { status: 'CONFIRMED' }
-      })
-
-      // Log status change event
-      await OrderEventService.createStatusChangeEvent(
-        tx,
-        orderId,
-        actorUserId || null,
-        'PENDING',
-        'CONFIRMED',
-        'Payment completed'
-      )
+      await OrderService.applyTransitionInTx(tx, orderId, 'CONFIRMED', actorUserId || null, 'Payment completed')
     }
   }
 
@@ -345,7 +330,7 @@ export class PaymentService {
   private static getPaymentEventType(status: string): string {
     switch (status) {
       case 'PROCESSING':
-        return OrderEventService.EVENT_TYPES.PAYMENT_CONFIRMED
+        return OrderEventService.EVENT_TYPES.PAYMENT_INITIATED
       case 'COMPLETED':
         return OrderEventService.EVENT_TYPES.PAYMENT_CONFIRMED
       case 'FAILED':
