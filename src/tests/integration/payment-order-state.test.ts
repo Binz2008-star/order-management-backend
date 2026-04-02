@@ -34,7 +34,7 @@ async function seedPendingOrder() {
     data: {
       sellerId: seller.id,
       name: 'Test Widget',
-      slug: 'test-widget',
+      slug: `test-widget-${ts}`,
       priceMinor: 1000,
       currency: 'USD',
       stockQuantity: 10,
@@ -62,8 +62,12 @@ async function seedPendingOrder() {
 }
 
 describe('Payment completion — order state integrity', () => {
-  test('payment completing on a PENDING order confirms it', async () => {
+  test('payment completing on a PENDING order moves to CONFIRMED with correct events', async () => {
     const { order } = await seedPendingOrder()
+
+    // Count events before payment
+    const eventsBefore = await prisma.orderEvent.findMany({ where: { orderId: order.id } })
+    const statusChangeCountBefore = eventsBefore.filter(e => e.eventType === 'STATUS_CHANGED').length
 
     const attempt = await PaymentService.createPaymentAttempt({
       orderId: order.id,
@@ -75,18 +79,44 @@ describe('Payment completion — order state integrity', () => {
     await PaymentService.updatePaymentStatus({
       paymentAttemptId: attempt.id,
       status: 'PROCESSING',
-      providerReference: 'pi_pending_test',
+      providerReference: 'pi_basic_test',
     })
 
     await PaymentService.updatePaymentStatus({
       paymentAttemptId: attempt.id,
       status: 'COMPLETED',
-      providerReference: 'pi_pending_test',
+      providerReference: 'pi_basic_test',
     })
 
     const updated = await prisma.order.findUniqueOrThrow({ where: { id: order.id } })
     expect(updated.status).toBe('CONFIRMED')
     expect(updated.paymentStatus).toBe('PAID')
+
+    // Verify payment attempt is completed
+    const payment = await prisma.paymentAttempt.findUnique({ where: { id: attempt.id } })
+    expect(payment?.status).toBe('COMPLETED')
+
+    // Verify event integrity
+    const eventsAfter = await prisma.orderEvent.findMany({ where: { orderId: order.id } })
+    const statusChangeCountAfter = eventsAfter.filter(e => e.eventType === 'STATUS_CHANGED').length
+
+    // Should have exactly one more STATUS_CHANGED event (PENDING -> CONFIRMED)
+    expect(statusChangeCountAfter).toBe(statusChangeCountBefore + 1)
+
+    // Verify correct payment events exist
+    const paymentEvents = eventsAfter.filter(e => e.eventType.startsWith('PAYMENT_'))
+    const paymentEventTypes = paymentEvents.map(e => e.eventType)
+    expect(paymentEventTypes).toContain('PAYMENT_INITIATED')
+    expect(paymentEventTypes).toContain('PAYMENT_CONFIRMED')
+
+    // Verify the status change event is correct
+    const statusChangeEvents = eventsAfter.filter(e => e.eventType === 'STATUS_CHANGED')
+    const latestStatusChange = statusChangeEvents[statusChangeEvents.length - 1]
+    if (latestStatusChange?.payloadJson) {
+      const payload = JSON.parse(latestStatusChange.payloadJson)
+      expect(payload.from).toBe('PENDING')
+      expect(payload.to).toBe('CONFIRMED')
+    }
   })
 
   test('payment completing on an already-PACKED order does not regress status', async () => {
