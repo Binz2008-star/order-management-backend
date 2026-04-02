@@ -52,4 +52,7 @@ async function getOrderEvents(
   })
 }
 
-export const GET = withParamsValidation(getOrderEvents, IdSchema)
+export const GET = withParamsValidation(
+  (params: { id: string }, request: NextRequest) => getOrderEvents(params, request),
+  IdSchema
+)
