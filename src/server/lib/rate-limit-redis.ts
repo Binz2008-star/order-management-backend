@@ -39,8 +39,7 @@ class RedisRateLimiter {
 
       const redisUrl = this.config.redisUrl || process.env.REDIS_URL || process.env.UPSTASH_REDIS_REST_URL
       if (!redisUrl) {
-        logger.warn('Redis URL not configured, falling back to memory rate limiting')
-        return
+        throw new Error('Redis URL is required for production rate limiting. Configure REDIS_URL or UPSTASH_REDIS_REST_URL environment variable.')
       }
 
       // Create Redis client
