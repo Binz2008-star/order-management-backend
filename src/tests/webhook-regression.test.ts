@@ -1,7 +1,6 @@
-import { describe, it, expect, beforeEach } from 'vitest'
-import { PaymentService } from '../../src/server/services/payment.service'
-import { OrderService } from '../../src/server/services/order.service'
+import { beforeEach, describe, expect, it } from 'vitest'
 import { prisma } from '../../src/server/db/prisma'
+import { PaymentService } from '../../src/server/services/payment.service'
 
 describe('Stripe Webhook Event Enforcement Regression Tests', () => {
   beforeEach(async () => {
@@ -65,14 +64,13 @@ describe('Stripe Webhook Event Enforcement Regression Tests', () => {
   describe('Payment Confirmation Idempotency', () => {
     it('should handle duplicate Stripe completion webhooks idempotently', async () => {
       const order = await createTestOrder()
-      
+
       // Create a payment attempt
       const paymentAttempt = await PaymentService.createPaymentAttempt({
         orderId: order.id,
         provider: 'STRIPE',
         amountMinor: 1000,
         currency: 'USD',
-        paymentType: 'CARD',
       })
 
       // Confirm payment first time
@@ -105,7 +103,7 @@ describe('Stripe Webhook Event Enforcement Regression Tests', () => {
 
       // Verify payment_completed event created only once
       const paymentCompletedEvents = await prisma.orderEvent.findMany({
-        where: { 
+        where: {
           orderId: order.id,
           eventType: 'payment_completed'
         },
@@ -114,7 +112,7 @@ describe('Stripe Webhook Event Enforcement Regression Tests', () => {
 
       // Verify status_changed event created only once
       const statusChangedEvents = await prisma.orderEvent.findMany({
-        where: { 
+        where: {
           orderId: order.id,
           eventType: 'status_changed'
         },
@@ -124,14 +122,13 @@ describe('Stripe Webhook Event Enforcement Regression Tests', () => {
 
     it('should update payment status exactly once', async () => {
       const order = await createTestOrder()
-      
+
       // Create a payment attempt
       const paymentAttempt = await PaymentService.createPaymentAttempt({
         orderId: order.id,
         provider: 'STRIPE',
         amountMinor: 1000,
         currency: 'USD',
-        paymentType: 'CARD',
       })
 
       // Get initial payment status
@@ -165,14 +162,13 @@ describe('Stripe Webhook Event Enforcement Regression Tests', () => {
   describe('Order State Transition Rules', () => {
     it('should allow PENDING order to confirm when payment completed', async () => {
       const order = await createTestOrder('PENDING')
-      
+
       // Create a payment attempt
       const paymentAttempt = await PaymentService.createPaymentAttempt({
         orderId: order.id,
         provider: 'STRIPE',
         amountMinor: 1000,
         currency: 'USD',
-        paymentType: 'CARD',
       })
 
       // Confirm payment
@@ -193,14 +189,13 @@ describe('Stripe Webhook Event Enforcement Regression Tests', () => {
 
     it('should not regress PACKED order status when payment completed', async () => {
       const order = await createTestOrder('PACKED')
-      
+
       // Create a payment attempt
       const paymentAttempt = await PaymentService.createPaymentAttempt({
         orderId: order.id,
         provider: 'STRIPE',
         amountMinor: 1000,
         currency: 'USD',
-        paymentType: 'CARD',
       })
 
       // Confirm payment
@@ -221,14 +216,13 @@ describe('Stripe Webhook Event Enforcement Regression Tests', () => {
 
     it('should not regress OUT_FOR_DELIVERY order status when payment completed', async () => {
       const order = await createTestOrder('OUT_FOR_DELIVERY')
-      
+
       // Create a payment attempt
       const paymentAttempt = await PaymentService.createPaymentAttempt({
         orderId: order.id,
         provider: 'STRIPE',
         amountMinor: 1000,
         currency: 'USD',
-        paymentType: 'CARD',
       })
 
       // Confirm payment
@@ -251,14 +245,13 @@ describe('Stripe Webhook Event Enforcement Regression Tests', () => {
   describe('Event Creation Integrity', () => {
     it('should create payment_completed event exactly once', async () => {
       const order = await createTestOrder()
-      
+
       // Create a payment attempt
       const paymentAttempt = await PaymentService.createPaymentAttempt({
         orderId: order.id,
         provider: 'STRIPE',
         amountMinor: 1000,
         currency: 'USD',
-        paymentType: 'CARD',
       })
 
       // Confirm payment
@@ -271,7 +264,7 @@ describe('Stripe Webhook Event Enforcement Regression Tests', () => {
 
       // Verify payment_completed event created exactly once
       const paymentCompletedEvents = await prisma.orderEvent.findMany({
-        where: { 
+        where: {
           orderId: order.id,
           eventType: 'payment_completed'
         },
@@ -286,14 +279,13 @@ describe('Stripe Webhook Event Enforcement Regression Tests', () => {
 
     it('should create events in correct order with truthful data', async () => {
       const order = await createTestOrder()
-      
+
       // Create a payment attempt
       const paymentAttempt = await PaymentService.createPaymentAttempt({
         orderId: order.id,
         provider: 'STRIPE',
         amountMinor: 1000,
         currency: 'USD',
-        paymentType: 'CARD',
       })
 
       // Confirm payment
@@ -338,7 +330,7 @@ describe('Stripe Webhook Event Enforcement Regression Tests', () => {
 
     it('should reject payment confirmation with provider mismatch', async () => {
       const order = await createTestOrder()
-      
+
       // Create a payment attempt with STRIPE
       const paymentAttempt = await PaymentService.createPaymentAttempt({
         orderId: order.id,
