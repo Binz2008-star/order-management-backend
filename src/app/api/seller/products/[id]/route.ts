@@ -1,12 +1,15 @@
-import { NextRequest, NextResponse } from 'next/server'
 import { prisma } from '@/server/db/prisma'
 import { getCurrentUser, requireSeller } from '@/server/lib/auth'
-import { withParamsValidation, withValidation, ApiError } from '@/server/lib/errors'
+import { ApiError, withParamsValidation, withValidation } from '@/server/lib/errors'
 import { IdSchema, UpdateProductSchema } from '@/server/lib/validation'
+import { NextRequest, NextResponse } from 'next/server'
+import type { z } from 'zod'
+
+type UpdateProductData = z.infer<typeof UpdateProductSchema>
 
 async function updateProduct(
   { id }: { id: string },
-  productData: any,
+  productData: UpdateProductData,
   request: NextRequest
 ) {
   const user = await getCurrentUser(request)

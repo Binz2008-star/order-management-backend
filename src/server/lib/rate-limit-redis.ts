@@ -30,7 +30,7 @@ class RedisRateLimiter {
     try {
       // Try to import and initialize Redis
       const redis = await import('redis')
-      
+
       const redisUrl = this.config.redisUrl || process.env.REDIS_URL || process.env.UPSTASH_REDIS_REST_URL
       if (!redisUrl) {
         logger.warn('Redis URL not configured, falling back to memory rate limiting')
@@ -65,12 +65,12 @@ class RedisRateLimiter {
     if (this.config.keyGenerator) {
       return this.config.keyGenerator(request)
     }
-    
-    const ip = request.ip || 
-      request.headers.get('x-forwarded-for')?.split(',')[0] || 
-      request.headers.get('x-real-ip') || 
+
+    const ip = request.ip ||
+      request.headers.get('x-forwarded-for')?.split(',')[0] ||
+      request.headers.get('x-real-ip') ||
       'unknown'
-    
+
     const prefix = this.config.redisKeyPrefix || 'rate_limit'
     return `${prefix}:${ip}`
   }
@@ -97,7 +97,7 @@ class RedisRateLimiter {
       }
 
       const currentCount = (results[0] as [string, number])[1]
-      const expireResult = (results[1] as [string, number])[1]
+      // const expireResult = (results[1] as [string, number])[1] // Not used currently
 
       const allowed = currentCount <= this.config.maxRequests
       const remaining = Math.max(0, this.config.maxRequests - currentCount)
@@ -121,19 +121,19 @@ class RedisRateLimiter {
 
   private handleMemoryRateLimit(key: string): { allowed: boolean; remaining: number; resetTime: number } {
     const now = Date.now()
-    
+
     let record = this.fallbackStore.get(key)
-    
+
     if (!record || now > record.resetTime) {
       record = { count: 0, resetTime: now + this.config.windowMs }
       this.fallbackStore.set(key, record)
     }
-    
+
     record.count++
-    
+
     const allowed = record.count <= this.config.maxRequests
     const remaining = Math.max(0, this.config.maxRequests - record.count)
-    
+
     if (!allowed) {
       logger.warn('Rate limit exceeded (memory fallback)', {
         key,
@@ -142,7 +142,7 @@ class RedisRateLimiter {
         windowMs: this.config.windowMs,
       })
     }
-    
+
     return { allowed, remaining, resetTime: record.resetTime }
   }
 
@@ -223,10 +223,10 @@ export class RateLimiter {
 
 export function createRateLimit(config: RateLimitConfig) {
   const limiter = new RateLimiter(config)
-  
+
   return async (request: NextRequest) => {
     const result = await limiter.isAllowed(request)
-    
+
     if (!result.allowed) {
       return {
         success: false,
@@ -238,7 +238,7 @@ export function createRateLimit(config: RateLimitConfig) {
         },
       }
     }
-    
+
     return {
       success: true,
       headers: {

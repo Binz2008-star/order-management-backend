@@ -1,11 +1,11 @@
-import { NextRequest, NextResponse } from 'next/server'
-import { withParamsValidation, ApiError } from '@/server/lib/errors'
+import { ApiError, withParamsValidation } from '@/server/lib/errors'
 import { SellerSlugSchema } from '@/server/lib/validation'
+import { NextRequest, NextResponse } from 'next/server'
 
 async function getPublicProducts(
-  { sellerSlug }: { sellerSlug: string },
-  request: NextRequest
-) {
+  { sellerSlug: _sellerSlug }: { sellerSlug: string },
+  _request: NextRequest
+): Promise<NextResponse> {
   // TODO: Implement public products endpoint
   throw new ApiError(501, 'Not implemented yet')
 }

@@ -1,10 +1,13 @@
-import { NextRequest, NextResponse } from 'next/server'
 import { prisma } from '@/server/db/prisma'
 import { getCurrentUser, requireSeller } from '@/server/lib/auth'
-import { withQueryValidation, ApiError } from '@/server/lib/errors'
+import { withQueryValidation } from '@/server/lib/errors'
 import { PaginationSchema } from '@/server/lib/validation'
+import { NextRequest, NextResponse } from 'next/server'
+import type { z } from 'zod'
 
-async function getOrders(query: any, request: NextRequest) {
+type PaginationQuery = z.infer<typeof PaginationSchema>
+
+async function getOrders(query: PaginationQuery, request: NextRequest) {
   const user = await getCurrentUser(request)
   requireSeller(user)
 

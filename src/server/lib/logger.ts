@@ -5,7 +5,7 @@ export interface LogContext {
   userId?: string
   sellerId?: string
   orderId?: string
-  [key: string]: any
+  [key: string]: unknown
 }
 
 export class Logger {
@@ -40,13 +40,13 @@ export class Logger {
   }
 
   error(message: string, error?: Error, context?: LogContext) {
-    console.error(this.formatMessage('ERROR', message, { 
-      ...context, 
+    console.error(this.formatMessage('ERROR', message, {
+      ...context,
       error: error ? {
         name: error.name,
         message: error.message,
         stack: error.stack,
-      } : undefined 
+      } : undefined
     }))
   }
 
