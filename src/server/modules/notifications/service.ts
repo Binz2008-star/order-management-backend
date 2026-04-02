@@ -1,12 +1,17 @@
 import { prisma } from '@/server/db/prisma'
 import { logger } from '@/server/lib/logger'
-import { NotificationChannel, NotificationJobStatus } from '@prisma/client'
+import { NotificationJob } from '@prisma/client'
+
+// Notification channel values to match schema strings
+type NotificationChannel = 'WHATSAPP' | 'EMAIL' | 'SMS'
 
 export interface NotificationPayload {
   channel: NotificationChannel
   recipient: string
   templateKey: string
-  data: Record<string, any>
+  sellerId: string
+  orderId?: string
+  data: Record<string, unknown>
 }
 
 export class NotificationService {
@@ -16,7 +21,9 @@ export class NotificationService {
         data: {
           channel: payload.channel,
           templateKey: payload.templateKey,
-          status: NotificationJobStatus.PENDING,
+          sellerId: payload.sellerId,
+          orderId: payload.orderId,
+          status: 'PENDING',
           scheduledAt: new Date(),
         },
       })
@@ -26,7 +33,7 @@ export class NotificationService {
         templateKey: payload.templateKey,
         recipient: payload.recipient,
       })
-    } catch (error) {
+    } catch (error: unknown) {
       logger.error('Failed to enqueue notification', error as Error)
       throw error
     }
@@ -35,7 +42,7 @@ export class NotificationService {
   async processPendingNotifications(): Promise<void> {
     const notifications = await prisma.notificationJob.findMany({
       where: {
-        status: NotificationJobStatus.PENDING,
+        status: 'PENDING',
         scheduledAt: {
           lte: new Date(),
         },
@@ -50,11 +57,11 @@ export class NotificationService {
     for (const notification of notifications) {
       try {
         await this.sendNotification(notification)
-        
+
         await prisma.notificationJob.update({
           where: { id: notification.id },
           data: {
-            status: NotificationJobStatus.SENT,
+            status: 'SENT',
             sentAt: new Date(),
           },
         })
@@ -63,11 +70,11 @@ export class NotificationService {
           notificationId: notification.id,
           channel: notification.channel,
         })
-      } catch (error) {
+      } catch (error: unknown) {
         await prisma.notificationJob.update({
           where: { id: notification.id },
           data: {
-            status: NotificationJobStatus.FAILED,
+            status: 'FAILED',
             retryCount: notification.retryCount + 1,
             errorText: error instanceof Error ? error.message : 'Unknown error',
           },
@@ -81,16 +88,16 @@ export class NotificationService {
     }
   }
 
-  private async sendNotification(notification: any): Promise<void> {
+  private async sendNotification(notification: NotificationJob): Promise<void> {
     // Stub implementation - in production, you'd integrate with actual providers
     switch (notification.channel) {
-      case NotificationChannel.WHATSAPP:
+      case 'WHATSAPP':
         await this.sendWhatsAppNotification(notification)
         break
-      case NotificationChannel.EMAIL:
+      case 'EMAIL':
         await this.sendEmailNotification(notification)
         break
-      case NotificationChannel.SMS:
+      case 'SMS':
         await this.sendSMSNotification(notification)
         break
       default:
@@ -98,27 +105,27 @@ export class NotificationService {
     }
   }
 
-  private async sendWhatsAppNotification(notification: any): Promise<void> {
+  private async sendWhatsAppNotification(notification: NotificationJob): Promise<void> {
     // WhatsApp integration stub
     logger.info('WhatsApp notification stub', {
-      recipient: notification.seller.whatsappNumber,
+      recipient: notification.sellerId,
       templateKey: notification.templateKey,
-      orderId: notification.orderId,
+      orderId: notification.orderId ?? undefined,
     })
   }
 
-  private async sendEmailNotification(notification: any): Promise<void> {
+  private async sendEmailNotification(notification: NotificationJob): Promise<void> {
     // Email integration stub
     logger.info('Email notification stub', {
-      recipient: notification.seller.ownerUserId,
+      recipient: notification.sellerId,
       templateKey: notification.templateKey,
     })
   }
 
-  private async sendSMSNotification(notification: any): Promise<void> {
+  private async sendSMSNotification(notification: NotificationJob): Promise<void> {
     // SMS integration stub
     logger.info('SMS notification stub', {
-      recipient: notification.seller.whatsappNumber,
+      recipient: notification.sellerId,
       templateKey: notification.templateKey,
     })
   }

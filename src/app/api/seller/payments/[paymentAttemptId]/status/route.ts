@@ -1,9 +1,9 @@
-import { NextRequest, NextResponse } from 'next/server'
+import { prisma } from '@/server/db/prisma'
 import { getCurrentUser, requireSeller } from '@/server/lib/auth'
-import { withParamsValidation, ApiError } from '@/server/lib/errors'
+import { ApiError, withParamsValidation } from '@/server/lib/errors'
 import { IdSchema } from '@/server/lib/validation'
 import { PaymentService } from '@/server/services/payment.service'
-import { prisma } from '@/server/db/prisma'
+import { NextRequest, NextResponse } from 'next/server'
 
 async function updatePaymentStatus(
   { paymentAttemptId }: { paymentAttemptId: string },
@@ -37,4 +37,8 @@ async function updatePaymentStatus(
   })
 }
 
-export const PUT = withParamsValidation(updatePaymentStatus, IdSchema)
+export const PUT = withParamsValidation(
+  (params: { id: string }, request: NextRequest) =>
+    updatePaymentStatus({ paymentAttemptId: params.id }, request),
+  IdSchema
+)

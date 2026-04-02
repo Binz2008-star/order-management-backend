@@ -1,30 +1,52 @@
+import { prisma } from '@/server/db/prisma'
 import { getCurrentUser, requireSeller } from '@/server/lib/auth'
-import { ApiError, withParamsValidation, withValidation } from '@/server/lib/errors'
+import { ApiError, handleApiError } from '@/server/lib/errors'
 import { IdSchema, UpdateOrderStatusSchema } from '@/server/lib/validation'
-import { OrderStatus } from '@/server/modules/orders/transitions'
+import { OrderTransitionError } from '@/server/modules/orders/transitions'
 import { orderService } from '@/server/services/order.service'
 import { NextRequest, NextResponse } from 'next/server'
 
-async function updateOrderStatus(
-  { id }: { id: string },
-  { status, reason }: { status: keyof typeof OrderStatus; reason?: string },
-  request: NextRequest
-) {
-  const user = await getCurrentUser(request)
-  requireSeller(user)
+function isOrderTransitionError(error: unknown): error is OrderTransitionError {
+  return (
+    error instanceof OrderTransitionError ||
+    (typeof error === 'object' &&
+      error !== null &&
+      'name' in error &&
+      (error as { name?: string }).name === 'OrderTransitionError')
+  )
+}
 
+export async function PATCH(
+  request: NextRequest,
+  context: { params: unknown }
+): Promise<NextResponse> {
   try {
-    const updatedOrder = await orderService.updateOrderStatus({
-      orderId: id,
-      newStatus: status as any,
-      actorUserId: user.id,
-      reason
+    const { id } = IdSchema.parse(context.params)
+    const { status, reason } = UpdateOrderStatusSchema.parse(await request.json())
+
+    const user = await getCurrentUser(request)
+    const seller = requireSeller(user)
+
+    const existingOrder = await prisma.order.findFirst({
+      where: {
+        id,
+        sellerId: seller.sellerId,
+      },
+      select: {
+        id: true,
+      },
     })
 
-    // Verify seller access
-    if (updatedOrder.sellerId !== user.sellerId) {
-      throw new ApiError(403, 'Access denied')
+    if (!existingOrder) {
+      throw new ApiError(404, 'Order not found')
     }
+
+    const updatedOrder = await orderService.updateOrderStatus({
+      orderId: id,
+      newStatus: status,
+      actorUserId: seller.id,
+      reason,
+    })
 
     return NextResponse.json({
       order: {
@@ -34,21 +56,14 @@ async function updateOrderStatus(
         updatedAt: updatedOrder.updatedAt,
       },
     })
-  } catch (error) {
-    if (error instanceof Error) {
-      if (error.name === 'OrderTransitionError') {
-        throw new ApiError(400, error.message)
-      }
-      throw new ApiError(500, error.message)
+  } catch (error: unknown) {
+    if (isOrderTransitionError(error)) {
+      return NextResponse.json(
+        { error: error.message },
+        { status: 400 }
+      )
     }
-    throw new ApiError(500, 'Unknown error')
+
+    return handleApiError(error)
   }
 }
-
-export const PATCH = withParamsValidation(
-  IdSchema,
-  (params, request) =>
-    withValidation(UpdateOrderStatusSchema, (data, req) =>
-      updateOrderStatus(params, data, req)
-    )(request)
-)

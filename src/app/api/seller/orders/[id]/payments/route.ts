@@ -72,5 +72,11 @@ async function getOrderPaymentAttempts(
   })
 }
 
-export const POST = withParamsValidation(createPaymentAttempt, IdSchema)
-export const GET = withParamsValidation(getOrderPaymentAttempts, IdSchema)
+export const POST = withParamsValidation(
+  (params: { id: string }, request: NextRequest) => createPaymentAttempt(params, request),
+  IdSchema
+)
+export const GET = withParamsValidation(
+  (params: { id: string }, request: NextRequest) => getOrderPaymentAttempts(params, request),
+  IdSchema
+)

@@ -7,15 +7,24 @@
     "build": "next build",
     "start": "next start",
     "lint": "eslint",
-    "test": "jest",
-    "test:watch": "jest --watch",
-    "test:coverage": "jest --coverage",
-    "seed": "tsx prisma/seed-simple.ts",
+    "lint:verbose": "eslint . --format stylish",
+    "lint:debug": "eslint . --format stylish --max-warnings=0",
+    "lint:fix": "eslint --fix",
+    "test": "vitest",
+    "test:watch": "vitest --watch",
+    "test:coverage": "vitest --coverage",
+    "test:ui": "vitest --ui",
+    "test:integration": "vitest --run src/tests/integration/",
+    "test:unit": "vitest --run src/tests/auth.test.ts src/tests/order.test.ts",
+    "seed": "tsx prisma/seed.ts",
+    "seed:legacy": "tsx prisma/seed-services.ts",
     "db:generate": "prisma generate",
     "db:migrate": "prisma migrate dev",
     "db:deploy": "prisma migrate deploy",
     "db:studio": "prisma studio",
-    "db:reset": "prisma migrate reset"
+    "db:reset": "prisma migrate reset",
+    "db:seed": "npm run db:reset && npm run seed",
+    "typecheck": "tsc --noEmit"
   },
   "dependencies": {
     "@prisma/adapter-pg": "7.6.0",
@@ -38,15 +47,14 @@
   },
   "devDependencies": {
     "@tailwindcss/postcss": "^4",
-    "@types/jest": "30.0.0",
     "@types/node": "^20",
     "@types/react": "^19",
     "@types/react-dom": "^19",
+    "@vitest/ui": "4.1.2",
     "eslint": "^9",
     "eslint-config-next": "16.2.2",
-    "jest": "30.3.0",
     "tailwindcss": "^4",
-    "ts-jest": "29.4.9",
-    "typescript": "^5"
+    "typescript": "^5",
+    "vitest": "4.1.2"
   }
 }

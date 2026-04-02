@@ -1,8 +1,8 @@
-import { NextRequest, NextResponse } from 'next/server'
 import { prisma } from '@/server/db/prisma'
 import { getCurrentUser, requireSeller } from '@/server/lib/auth'
 import { withParamsValidation } from '@/server/lib/errors'
 import { IdSchema } from '@/server/lib/validation'
+import { NextRequest, NextResponse } from 'next/server'
 
 async function getOrderDetail({ id }: { id: string }, request: NextRequest) {
   const user = await getCurrentUser(request)
@@ -87,6 +87,7 @@ async function getOrderDetail({ id }: { id: string }, request: NextRequest) {
   })
 }
 
-export const GET = withParamsValidation(IdSchema, (data, request) =>
-  getOrderDetail(data, request)
+export const GET = withParamsValidation(
+  (data: { id: string }, request: NextRequest) => getOrderDetail(data, request),
+  IdSchema
 )

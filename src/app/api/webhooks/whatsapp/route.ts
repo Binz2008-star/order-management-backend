@@ -1,21 +1,20 @@
-import { NextRequest, NextResponse } from 'next/server'
 import { prisma } from '@/server/db/prisma'
 import { logger } from '@/server/lib/logger'
-import { WebhookStatus } from '@prisma/client'
+import { NextRequest, NextResponse } from 'next/server'
 
 // WhatsApp webhook processing (simplified)
 async function processWhatsAppWebhook(request: NextRequest) {
-  const body = await request.json()
-  
+  const body: Record<string, unknown> = await request.json()
+
   try {
     // Store webhook event
     await prisma.webhookEvent.create({
       data: {
-        provider: 'WHATSAPP' as any, // Add to enum if needed
-        eventId: body.id || 'unknown',
-        eventType: body.type || 'message',
-        payloadJson: body,
-        status: WebhookStatus.PROCESSED,
+        provider: 'WHATSAPP', // TODO: Add to Prisma enum if needed
+        eventId: (body.id as string) || 'unknown',
+        eventType: (body.type as string) || 'message',
+        payloadJson: JSON.stringify(body),
+        status: 'PROCESSED',
         processedAt: new Date(),
       },
     })
@@ -26,7 +25,7 @@ async function processWhatsAppWebhook(request: NextRequest) {
     })
 
     return NextResponse.json({ status: 'processed' })
-  } catch (error) {
+  } catch (error: unknown) {
     logger.error('WhatsApp webhook processing failed', error as Error)
     return NextResponse.json(
       { error: 'Webhook processing failed' },

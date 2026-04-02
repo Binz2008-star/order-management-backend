@@ -1,10 +1,14 @@
-import { NextRequest, NextResponse } from 'next/server'
 import { prisma } from '@/server/db/prisma'
 import { getCurrentUser, requireSeller } from '@/server/lib/auth'
-import { withQueryValidation, withValidation, ApiError } from '@/server/lib/errors'
-import { PaginationSchema, CreateProductSchema, UpdateProductSchema } from '@/server/lib/validation'
+import { ApiError, withQueryValidation, withValidation } from '@/server/lib/errors'
+import { CreateProductSchema, PaginationSchema } from '@/server/lib/validation'
+import { NextRequest, NextResponse } from 'next/server'
+import type { z } from 'zod'
 
-async function getProducts(query: any, request: NextRequest) {
+type PaginationQuery = z.infer<typeof PaginationSchema>
+type CreateProductData = z.infer<typeof CreateProductSchema>
+
+async function getProducts(query: PaginationQuery, request: NextRequest) {
   const user = await getCurrentUser(request)
   requireSeller(user)
 
@@ -53,7 +57,7 @@ async function getProducts(query: any, request: NextRequest) {
   })
 }
 
-async function createProduct(productData: any, request: NextRequest) {
+async function createProduct(productData: CreateProductData, request: NextRequest) {
   const user = await getCurrentUser(request)
   requireSeller(user)
 

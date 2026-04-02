@@ -1,421 +1,345 @@
 import { Prisma } from '@prisma/client'
 import { prisma } from '../db/prisma'
-import { logger } from '../lib/logger'
-import { PaymentGuards } from '../lib/payment-guards'
-import { OrderEventService } from './order-event.service'
+import { createOrderEvent } from '../modules/orders/event.service'
 
-export enum PaymentStatus {
-  PENDING = 'PENDING',
-  PROCESSING = 'PROCESSING',
-  COMPLETED = 'COMPLETED',
-  FAILED = 'FAILED',
-  CANCELLED = 'CANCELLED',
-  REFUNDED = 'REFUNDED'
-}
+type Tx = Prisma.TransactionClient
+
+// Payment status values to match schema strings
+type PaymentStatus = 'PENDING' | 'PROCESSING' | 'COMPLETED' | 'FAILED' | 'CANCELLED' | 'REFUNDED'
 
 export interface CreatePaymentAttemptData {
   orderId: string
   provider: string
   amountMinor: number
   currency: string
-  providerReference?: string
   metadata?: Record<string, unknown>
 }
 
-export interface PaymentResult {
-  paymentAttempt: PaymentAttempt
-  orderStatus: string
-  paymentStatus: string
+export interface UpdatePaymentStatusData {
+  paymentAttemptId: string
+  status: PaymentStatus
+  providerReference?: string
+  failureReason?: string
+  metadata?: Record<string, unknown>
 }
 
-export interface RefundResult {
-  paymentAttempt: PaymentAttempt
+export interface RefundPaymentData {
+  paymentAttemptId: string
   refundAmountMinor: number
-  paymentStatus: string
-}
-
-export interface PaymentAttempt {
-  id: string
-  orderId: string
-  provider: string
-  providerReference?: string | null
-  amountMinor: number
-  currency: string
-  status: string // Prisma returns string, not enum
-  failureReason?: string | null
-  metadataJson?: string | null
-  rawPayloadJson?: string | null
-  createdAt: Date
-  updatedAt: Date
+  reason: string
+  metadata?: Record<string, unknown>
 }
 
 export class PaymentService {
-  /**
-   * Create a new payment attempt with atomic transaction
-   */
+  private static readonly PAYMENT_STATUS_TRANSITIONS: Record<PaymentStatus, PaymentStatus[]> = {
+    PENDING: ['PROCESSING', 'CANCELLED', 'FAILED'],
+    PROCESSING: ['COMPLETED', 'FAILED', 'CANCELLED'],
+    COMPLETED: ['REFUNDED'],
+    FAILED: ['PENDING'],
+    CANCELLED: ['PENDING'],
+    REFUNDED: [],
+  }
+
+  private static isValidPaymentTransition(
+    from: PaymentStatus,
+    to: PaymentStatus
+  ): boolean {
+    return this.PAYMENT_STATUS_TRANSITIONS[from]?.includes(to) ?? false
+  }
+
   static async createPaymentAttempt(
     data: CreatePaymentAttemptData,
-    actorUserId: string
-  ): Promise<PaymentAttempt> {
-    return await prisma.$transaction(async (tx) => {
-      // 1. LOCK ORDER (prevents concurrent attempts)
+    actorUserId?: string
+  ) {
+    return prisma.$transaction(async (tx) => {
       const order = await tx.order.findUnique({
         where: { id: data.orderId },
-        include: { paymentAttempts: true }
-      })
-
-      if (!order) {
-        throw new Error('Order not found')
-      }
-
-      // 2. ENFORCE INVARIANTS
-      PaymentGuards.rejectCODPaymentAttempts({
-        orderId: data.orderId,
-        paymentType: order.paymentType,
-        currentPaymentStatus: order.paymentStatus
-      })
-
-      PaymentGuards.preventDuplicatePaymentAttempts(
-        order.paymentAttempts,
-        data.orderId
-      )
-
-      // 3. CHECK IDEMPOTENCY for provider reference
-      if (data.providerReference) {
-        const existing = await this.checkIdempotency(
-          data.provider,
-          data.providerReference
-        )
-
-        if (existing) {
-          return existing
+        select: {
+          id: true,
+          paymentAttempts: {
+            where: {
+              status: { in: ['PENDING', 'PROCESSING'] }
+            },
+            select: { id: true }
+          }
         }
+      })
+
+      if (!order) throw new Error('Order not found')
+
+      if (order.paymentAttempts.length > 0) {
+        throw new Error('Active payment attempt exists')
       }
 
-      // 4. CREATE PAYMENT ATTEMPT
       const paymentAttempt = await tx.paymentAttempt.create({
         data: {
           orderId: data.orderId,
           provider: data.provider,
-          providerReference: data.providerReference || null,
           amountMinor: data.amountMinor,
           currency: data.currency,
           status: 'PENDING',
-          failureReason: null,
-          metadataJson: data.metadata ? JSON.stringify(data.metadata) : null
-        }
+          metadataJson: data.metadata ? JSON.stringify(data.metadata) : null,
+        },
       })
 
-      // 5. MANDATORY EVENT CREATION
-      await OrderEventService.createPaymentEvent(
-        tx,
-        data.orderId,
-        actorUserId,
-        'PAYMENT_INITIATED',
-        {
+      await createOrderEvent(tx, {
+        orderId: data.orderId,
+        eventType: 'payment_initiated',
+        actorUserId: actorUserId ?? null,
+        payload: {
           provider: data.provider,
           amountMinor: data.amountMinor,
-          currency: data.currency
-        }
-      )
-
-      logger.info('Payment attempt created', {
-        paymentAttemptId: paymentAttempt.id,
-        orderId: data.orderId,
-        provider: data.provider,
-        amountMinor: data.amountMinor,
+          currency: data.currency,
+        },
       })
 
-      return paymentAttempt as PaymentAttempt
+      return paymentAttempt
     })
   }
 
-  /**
-   * Complete payment with atomic transaction
-   */
-  static async completePayment(
-    paymentAttemptId: string,
-    providerReference: string,
-    actorUserId: string
-  ): Promise<PaymentResult> {
-    return await prisma.$transaction(async (tx) => {
-      // 1. LOCK PAYMENT ATTEMPT
-      const paymentAttempt = await tx.paymentAttempt.findUnique({
-        where: { id: paymentAttemptId },
-        include: { order: true }
+  static async updatePaymentStatus(
+    data: UpdatePaymentStatusData,
+    actorUserId?: string
+  ) {
+    return prisma.$transaction(async (tx) => {
+      const attempt = await tx.paymentAttempt.findUnique({
+        where: { id: data.paymentAttemptId },
+        select: {
+          id: true,
+          status: true,
+          orderId: true,
+          provider: true,
+          amountMinor: true,
+          currency: true,
+          providerReference: true,
+        }
       })
 
-      if (!paymentAttempt) {
-        throw new Error('Payment attempt not found')
+      if (!attempt) throw new Error('Payment attempt not found')
+
+      if (attempt.status === data.status) return attempt
+
+      if (!this.isValidPaymentTransition(attempt.status as PaymentStatus, data.status)) {
+        throw new Error(`Invalid transition ${attempt.status} → ${data.status}`)
       }
 
-      // 2. ENFORCE STATE TRANSITION
-      PaymentGuards.enforcePaymentStateTransition(
-        paymentAttempt.status,
-        'COMPLETED'
-      )
-
-      // 3. CHECK IDEMPOTENCY
-      if (providerReference) {
-        const existing = await tx.paymentAttempt.findFirst({
+      if (data.status === 'COMPLETED' && data.providerReference) {
+        const exists = await tx.paymentAttempt.findFirst({
           where: {
-            provider: paymentAttempt.provider,
-            providerReference,
-            status: 'COMPLETED'
-          }
+            providerReference: data.providerReference,
+            status: 'COMPLETED',
+            NOT: { id: data.paymentAttemptId },
+          },
+          select: { id: true }
         })
 
-        if (existing && existing.id !== paymentAttemptId) {
-          throw new Error(`Provider reference ${providerReference} already used`)
+        if (exists) {
+          throw new Error('Duplicate providerReference (idempotency violation)')
         }
       }
 
-      // 4. UPDATE PAYMENT ATTEMPT
-      const updatedPayment = await tx.paymentAttempt.update({
-        where: { id: paymentAttemptId },
+      const updated = await tx.paymentAttempt.update({
+        where: { id: data.paymentAttemptId },
         data: {
-          status: 'COMPLETED',
-          providerReference,
-          updatedAt: new Date()
-        }
+          status: data.status,
+          providerReference: data.providerReference ?? attempt.providerReference,
+          failureReason: data.failureReason ?? null,
+          metadataJson: data.metadata ? JSON.stringify(data.metadata) : null,
+        },
       })
 
-      // 5. UPDATE ORDER PAYMENT STATUS
-      await tx.order.update({
-        where: { id: paymentAttempt.orderId },
-        data: { paymentStatus: 'PAID' }
+      await createOrderEvent(tx, {
+        orderId: attempt.orderId,
+        eventType: this.getPaymentEventType(data.status),
+        actorUserId: actorUserId ?? null,
+        payload: {
+          provider: attempt.provider,
+          amountMinor: attempt.amountMinor,
+          currency: attempt.currency,
+          providerReference: data.providerReference,
+          failureReason: data.failureReason,
+        },
       })
 
-      let finalOrderStatus = paymentAttempt.order.status
-
-      // 6. AUTO-CONFIRM PENDING ORDERS
-      if (paymentAttempt.order.status === 'PENDING') {
-        await tx.order.update({
-          where: { id: paymentAttempt.orderId },
-          data: { status: 'CONFIRMED' }
-        })
-
-        // 7. MANDATORY STATUS CHANGE EVENT
-        await OrderEventService.createStatusChangeEvent(
-          tx,
-          paymentAttempt.orderId,
-          actorUserId,
-          'PENDING',
-          'CONFIRMED',
-          'Payment completed'
-        )
-
-        finalOrderStatus = 'CONFIRMED'
+      if (data.status === 'COMPLETED') {
+        await this.handlePaymentCompletion(tx, attempt.orderId)
       }
 
-      // 8. MANDATORY PAYMENT EVENT
-      await OrderEventService.createPaymentEvent(
-        tx,
-        paymentAttempt.orderId,
-        actorUserId,
-        'PAYMENT_CONFIRMED',
-        {
-          provider: paymentAttempt.provider,
-          amountMinor: paymentAttempt.amountMinor,
-          currency: paymentAttempt.currency,
-          providerReference
-        }
-      )
-
-      logger.info('Payment completed', {
-        paymentAttemptId,
-        providerReference,
-        orderId: paymentAttempt.orderId,
-      })
-
-      return {
-        paymentAttempt: updatedPayment as PaymentAttempt,
-        orderStatus: finalOrderStatus,
-        paymentStatus: 'PAID'
+      if (['FAILED', 'CANCELLED'].includes(data.status)) {
+        await this.handlePaymentFailure(tx, attempt.orderId)
       }
+
+      return updated
     })
   }
 
-  /**
-   * Fail payment with atomic transaction
-   */
-  static async failPayment(
-    paymentAttemptId: string,
-    failureReason: string,
-    actorUserId: string
-  ): Promise<PaymentResult> {
-    return await prisma.$transaction(async (tx) => {
-      // 1. LOCK PAYMENT ATTEMPT
-      const paymentAttempt = await tx.paymentAttempt.findUnique({
-        where: { id: paymentAttemptId },
-        include: { order: true }
-      })
-
-      if (!paymentAttempt) {
-        throw new Error('Payment attempt not found')
-      }
-
-      // 2. ENFORCE STATE TRANSITION
-      PaymentGuards.enforcePaymentStateTransition(
-        paymentAttempt.status,
-        'FAILED'
-      )
-
-      // 3. UPDATE PAYMENT ATTEMPT
-      const updatedPayment = await tx.paymentAttempt.update({
-        where: { id: paymentAttemptId },
-        data: {
-          status: 'FAILED',
-          updatedAt: new Date()
-        }
-      })
-
-      // 4. UPDATE ORDER PAYMENT STATUS
-      await tx.order.update({
-        where: { id: paymentAttempt.orderId },
-        data: { paymentStatus: 'FAILED' }
-      })
-
-      // 5. MANDATORY PAYMENT EVENT
-      await OrderEventService.createPaymentEvent(
-        tx,
-        paymentAttempt.orderId,
-        actorUserId,
-        'PAYMENT_FAILED',
-        {
-          provider: paymentAttempt.provider,
-          amountMinor: paymentAttempt.amountMinor,
-          currency: paymentAttempt.currency,
-          failureReason
-        }
-      )
-
-      logger.info('Payment failed', {
-        paymentAttemptId,
-        failureReason,
-        orderId: paymentAttempt.orderId,
-      })
-
-      return {
-        paymentAttempt: updatedPayment as PaymentAttempt,
-        orderStatus: paymentAttempt.order.status,
-        paymentStatus: 'FAILED'
-      }
-    })
-  }
-
-  /**
-   * Refund payment with atomic transaction
-   */
   static async refundPayment(
-    paymentAttemptId: string,
-    refundAmountMinor: number,
-    reason: string,
-    actorUserId: string
-  ): Promise<RefundResult> {
-    return await prisma.$transaction(async (tx) => {
-      // 1. LOCK PAYMENT ATTEMPT
-      const paymentAttempt = await tx.paymentAttempt.findUnique({
-        where: { id: paymentAttemptId },
-        include: { order: true }
+    data: RefundPaymentData,
+    actorUserId?: string
+  ) {
+    return prisma.$transaction(async (tx) => {
+      const attempt = await tx.paymentAttempt.findUnique({
+        where: { id: data.paymentAttemptId },
+        select: {
+          id: true,
+          status: true,
+          amountMinor: true,
+          orderId: true,
+          metadataJson: true,
+        }
       })
 
-      if (!paymentAttempt) {
-        throw new Error('Payment attempt not found')
+      if (!attempt) throw new Error('Payment attempt not found')
+
+      if (attempt.status !== 'COMPLETED') {
+        throw new Error('Refund only allowed for COMPLETED payments')
       }
 
-      // 2. ENFORCE REFUND RULES
-      PaymentGuards.preventRefundOnNonCompletedPayment(paymentAttempt.status)
-      PaymentGuards.validateRefundAmount(
-        refundAmountMinor,
-        paymentAttempt.amountMinor
-      )
+      if (data.refundAmountMinor > attempt.amountMinor) {
+        throw new Error('Refund exceeds original amount')
+      }
 
-      // 3. UPDATE PAYMENT ATTEMPT
-      const updatedPayment = await tx.paymentAttempt.update({
-        where: { id: paymentAttemptId },
+      // Merge refund metadata with existing metadata
+      const existingMetadata = attempt.metadataJson ? JSON.parse(attempt.metadataJson) : {}
+      const updatedMetadata = {
+        ...existingMetadata,
+        refundAmountMinor: data.refundAmountMinor,
+        reason: data.reason,
+        refundedAt: new Date().toISOString(),
+        ...(data.metadata || {}),
+      }
+
+      const updated = await tx.paymentAttempt.update({
+        where: { id: data.paymentAttemptId },
         data: {
           status: 'REFUNDED',
-          updatedAt: new Date()
-        }
+          metadataJson: JSON.stringify(updatedMetadata),
+        },
       })
 
-      // Store refund metadata separately or add to rawPayloadJson if needed
-      if (paymentAttempt.rawPayloadJson) {
-        const existingPayload = JSON.parse(paymentAttempt.rawPayloadJson)
-        await tx.paymentAttempt.update({
-          where: { id: paymentAttemptId },
-          data: {
-            rawPayloadJson: JSON.stringify({
-              ...existingPayload,
-              refundAmountMinor,
-              refundReason: reason,
-              refundDate: new Date().toISOString()
-            })
-          }
-        })
-      }
-
-      // 4. UPDATE ORDER PAYMENT STATUS
       await tx.order.update({
-        where: { id: paymentAttempt.orderId },
+        where: { id: attempt.orderId },
         data: { paymentStatus: 'REFUNDED' }
       })
 
-      // 5. MANDATORY REFUND EVENT
-      await OrderEventService.createPaymentEvent(
-        tx,
-        paymentAttempt.orderId,
-        actorUserId,
-        'PAYMENT_REFUNDED',
-        {
-          provider: paymentAttempt.provider,
-          amountMinor: refundAmountMinor,
-          currency: paymentAttempt.currency
-        }
-      )
-
-      logger.info('Payment refunded', {
-        paymentAttemptId,
-        refundAmountMinor,
-        reason,
-        orderId: paymentAttempt.orderId,
+      await createOrderEvent(tx, {
+        orderId: attempt.orderId,
+        eventType: 'payment_refunded',
+        actorUserId: actorUserId ?? null,
+        payload: {
+          refundAmountMinor: data.refundAmountMinor,
+          reason: data.reason,
+        },
       })
 
-      return {
-        paymentAttempt: updatedPayment as PaymentAttempt,
-        refundAmountMinor,
-        paymentStatus: 'REFUNDED'
+      return updated
+    })
+  }
+
+  private static getPaymentEventType(status: PaymentStatus): string {
+    switch (status) {
+      case 'PROCESSING':
+        return 'payment_initiated'
+      case 'COMPLETED':
+        return 'payment_completed'
+      case 'FAILED':
+      case 'CANCELLED':
+        return 'payment_failed'
+      case 'REFUNDED':
+        return 'payment_refunded'
+      default:
+        return 'payment_status_changed'
+    }
+  }
+
+  private static async handlePaymentCompletion(
+    tx: Tx,
+    orderId: string
+  ) {
+    await tx.order.update({
+      where: { id: orderId },
+      data: { paymentStatus: 'PAID' }
+    })
+
+    const order = await tx.order.findUnique({ where: { id: orderId } })
+    if (order && order.status === 'PENDING') {
+      await tx.order.update({
+        where: { id: orderId },
+        data: { status: 'CONFIRMED' }
+      })
+
+      await createOrderEvent(tx, {
+        orderId,
+        eventType: 'status_changed',
+        actorUserId: null,
+        payload: {
+          from: 'PENDING',
+          to: 'CONFIRMED',
+          reason: 'payment_completed',
+        },
+      })
+    }
+  }
+
+  private static async handlePaymentFailure(
+    tx: Tx,
+    orderId: string
+  ) {
+    await tx.order.update({
+      where: { id: orderId },
+      data: { paymentStatus: 'FAILED' }
+    })
+
+    await createOrderEvent(tx, {
+      orderId,
+      eventType: 'payment_failed',
+      actorUserId: null,
+      payload: {
+        timestamp: new Date().toISOString(),
+      },
+    })
+  }
+
+  static async getOrderPaymentAttempts(orderId: string) {
+    return prisma.paymentAttempt.findMany({
+      where: { orderId },
+      orderBy: { createdAt: 'desc' },
+      select: {
+        id: true,
+        orderId: true,
+        provider: true,
+        providerReference: true,
+        amountMinor: true,
+        currency: true,
+        status: true,
+        paymentType: true,
+        failureReason: true,
+        metadataJson: true,
+        createdAt: true,
+        updatedAt: true,
       }
     })
   }
 
-  /**
-   * Check idempotency by provider reference
-   */
-  static async checkIdempotency(
-    provider: string,
-    providerReference: string
-  ): Promise<PaymentAttempt | null> {
-    return await prisma.paymentAttempt.findFirst({
-      where: {
-        provider,
-        providerReference,
-        status: 'COMPLETED'
-      }
-    }) as PaymentAttempt | null
-  }
-
-  /**
-   * Get payment attempts for an order
-   */
-  static async getOrderPaymentAttempts(orderId: string) {
-    return await prisma.paymentAttempt.findMany({
-      where: { orderId },
-      orderBy: { createdAt: 'desc' },
-      include: {
+  static async getPaymentAttempt(paymentAttemptId: string) {
+    return prisma.paymentAttempt.findUnique({
+      where: { id: paymentAttemptId },
+      select: {
+        id: true,
+        orderId: true,
+        provider: true,
+        providerReference: true,
+        amountMinor: true,
+        currency: true,
+        status: true,
+        paymentType: true,
+        failureReason: true,
+        metadataJson: true,
+        createdAt: true,
+        updatedAt: true,
         order: {
           select: {
+            id: true,
             publicOrderNumber: true,
             status: true,
             paymentStatus: true,
@@ -423,80 +347,5 @@ export class PaymentService {
         }
       }
     })
-  }
-
-  /**
-   * Get payment attempt by ID
-   */
-  static async getPaymentAttempt(paymentAttemptId: string) {
-    return await prisma.paymentAttempt.findUnique({
-      where: { id: paymentAttemptId },
-      include: {
-        order: {
-          include: {
-            customer: true,
-            orderItems: true,
-          }
-        }
-      }
-    })
-  }
-
-  /**
-   * Get payment statistics for a seller (read-only operation)
-   */
-  static async getSellerPaymentStats(sellerId: string, startDate?: Date, endDate?: Date) {
-    const where: Prisma.PaymentAttemptWhereInput = {
-      order: { sellerId },
-    }
-
-    if (startDate || endDate) {
-      where.createdAt = {}
-      if (startDate) where.createdAt.gte = startDate
-      if (endDate) where.createdAt.lte = endDate
-    }
-
-    const attempts = await prisma.paymentAttempt.findMany({
-      where,
-      include: {
-        order: {
-          select: {
-            totalMinor: true,
-            currency: true,
-          }
-        }
-      }
-    })
-
-    const stats = attempts.reduce((acc, attempt) => {
-      acc.totalAttempts++
-      acc.totalAmountMinor += attempt.amountMinor
-
-      switch (attempt.status) {
-        case 'COMPLETED':
-          acc.completedPayments++
-          acc.completedAmountMinor += attempt.amountMinor
-          break
-        case 'FAILED':
-          acc.failedPayments++
-          break
-        case 'REFUNDED':
-          acc.refundedPayments++
-          acc.refundedAmountMinor += attempt.amountMinor
-          break
-      }
-
-      return acc
-    }, {
-      totalAttempts: 0,
-      totalAmountMinor: 0,
-      completedPayments: 0,
-      completedAmountMinor: 0,
-      failedPayments: 0,
-      refundedPayments: 0,
-      refundedAmountMinor: 0,
-    })
-
-    return stats
   }
 }

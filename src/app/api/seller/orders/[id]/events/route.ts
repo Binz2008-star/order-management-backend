@@ -1,22 +1,36 @@
-import { NextRequest, NextResponse } from 'next/server'
-import { getCurrentUser, requireSeller } from '@/server/lib/auth'
-import { withParamsValidation, ApiError } from '@/server/lib/errors'
-import { IdSchema } from '@/server/lib/validation'
-import { OrderEventService } from '@/server/services/order-event.service'
 import { prisma } from '@/server/db/prisma'
+import { getCurrentUser, requireSeller } from '@/server/lib/auth'
+import { ApiError, withParamsValidation } from '@/server/lib/errors'
+import { IdSchema } from '@/server/lib/validation'
+import { eventService } from '@/server/modules/orders/event.service'
+import { NextRequest, NextResponse } from 'next/server'
+
+function safeParseJson(value: string | null) {
+  if (!value) return null
+
+  try {
+    return JSON.parse(value)
+  } catch {
+    return { raw: value }
+  }
+}
 
 async function getOrderEvents(
   { id }: { id: string },
   request: NextRequest
 ) {
   const user = await getCurrentUser(request)
-  requireSeller(user)
+  const seller = requireSeller(user)
 
-  // Verify order belongs to seller
   const order = await prisma.order.findFirst({
     where: {
       id,
-      sellerId: user.sellerId!,
+      sellerId: seller.sellerId,
+    },
+    select: {
+      id: true,
+      publicOrderNumber: true,
+      status: true,
     },
   })
 
@@ -24,17 +38,21 @@ async function getOrderEvents(
     throw new ApiError(404, 'Order not found')
   }
 
-  // Get order events
-  const events = await OrderEventService.getOrderTimeline(prisma, id)
+  const events = await eventService.getOrderEvents(id)
 
   return NextResponse.json({
-    events,
-    order: {
-      id: order.id,
-      publicOrderNumber: order.publicOrderNumber,
-      status: order.status,
-    },
+    order,
+    events: events.map((event) => ({
+      id: event.id,
+      actorUserId: event.actorUserId,
+      eventType: event.eventType,
+      payload: safeParseJson(event.payloadJson),
+      createdAt: event.createdAt,
+    })),
   })
 }
 
-export const GET = withParamsValidation(getOrderEvents, IdSchema)
+export const GET = withParamsValidation(
+  (params: { id: string }, request: NextRequest) => getOrderEvents(params, request),
+  IdSchema
+)
