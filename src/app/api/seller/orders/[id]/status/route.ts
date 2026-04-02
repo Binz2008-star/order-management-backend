@@ -1,8 +1,8 @@
 import { getCurrentUser, requireSeller } from '@/server/lib/auth'
 import { ApiError, withParamsValidation, withValidation } from '@/server/lib/errors'
 import { IdSchema, UpdateOrderStatusSchema } from '@/server/lib/validation'
-import { orderService } from '@/server/modules/orders/order.service'
 import { OrderStatus } from '@/server/modules/orders/transitions'
+import { orderService } from '@/server/services/order.service'
 import { NextRequest, NextResponse } from 'next/server'
 
 async function updateOrderStatus(
@@ -14,11 +14,11 @@ async function updateOrderStatus(
   requireSeller(user)
 
   try {
-    const updatedOrder = await orderService.applyTransition({
+    const updatedOrder = await orderService.updateOrderStatus({
       orderId: id,
       newStatus: status,
       actorUserId: user.id,
-      notes: reason
+      reason
     })
 
     // Verify seller access
