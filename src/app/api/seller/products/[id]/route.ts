@@ -5,7 +5,7 @@ import { NextRequest, NextResponse } from 'next/server'
 
 async function updateProduct(
   { id }: { id: string },
-  productData: any,
+  productData: Record<string, unknown>,
   request: NextRequest
 ) {
   const user = await getCurrentUser(request)
