@@ -11,7 +11,7 @@ describe('Basic System Tests', () => {
   test('password hashing works', async () => {
     const password = 'test-password-123'
     const hash = await hashPassword(password)
-    
+
     expect(hash).not.toBe(password)
     expect(hash.length).toBeGreaterThan(50) // bcrypt hashes are long
   })
@@ -26,10 +26,10 @@ describe('Basic System Tests', () => {
     }
 
     const user = await prisma.user.create({ data: userData })
-    
+
     expect(user.id).toBe(userData.id)
     expect(user.email).toBe(userData.email)
-    expect(user.passwordHash).toBe(userData.passwordHash)
+    expect((user as any).passwordHash).toBe(userData.passwordHash)
     expect(user.isActive).toBe(true)
 
     // Cleanup

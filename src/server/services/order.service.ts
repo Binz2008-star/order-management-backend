@@ -263,7 +263,7 @@ export class OrderService {
 
   private async validateTransitionRules(
     tx: Prisma.TransactionClient,
-    order: any,
+    order: Order & { orderItems: OrderItem[] },
     newStatus: OrderStatus,
     reason?: string
   ) {
@@ -315,7 +315,7 @@ export class OrderService {
 
   private async handlePostTransitionActions(
     tx: Prisma.TransactionClient,
-    order: any,
+    order: Order & { orderItems: OrderItem[] },
     oldStatus: OrderStatus,
     newStatus: OrderStatus
   ) {
