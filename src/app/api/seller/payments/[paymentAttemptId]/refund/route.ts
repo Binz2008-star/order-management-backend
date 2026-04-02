@@ -1,6 +1,7 @@
 import { prisma } from '@/server/db/prisma'
 import { getCurrentUser, requireSeller } from '@/server/lib/auth'
 import { ApiError, withParamsValidation } from '@/server/lib/errors'
+import { PaymentAttemptIdSchema } from '@/server/lib/validation'
 import { PaymentService } from '@/server/services/payment.service'
 import { NextRequest, NextResponse } from 'next/server'
 

@@ -331,20 +331,19 @@ describe('Stripe Webhook Event Enforcement Regression Tests', () => {
     it('should reject payment confirmation with provider mismatch', async () => {
       const order = await createTestOrder()
 
-      // Create a payment attempt with STRIPE
+      // Create a payment attempt with STRIPE provider
       const paymentAttempt = await PaymentService.createPaymentAttempt({
         orderId: order.id,
         provider: 'STRIPE',
         amountMinor: 1000,
         currency: 'USD',
-        paymentType: 'CARD',
       })
 
       // Try to confirm with different provider
       await expect(
         PaymentService.confirmPayment({
           paymentAttemptId: paymentAttempt.id,
-          provider: 'PAYPAL', // Different provider
+          provider: 'PAYPAL',
           providerReference: 'pi_test_mismatch',
           rawPayload: { id: 'pi_test_mismatch', status: 'succeeded' },
         })

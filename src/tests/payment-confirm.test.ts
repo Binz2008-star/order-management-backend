@@ -66,8 +66,7 @@ describe('PaymentService.confirmPayment', () => {
       provider: 'STRIPE',
       amountMinor: 1000,
       currency: 'USD',
-      paymentType: 'CARD',
-    })
+    }, 'test-user')
 
     // Confirm payment
     const confirmedPayment = await PaymentService.confirmPayment({
@@ -153,8 +152,7 @@ describe('PaymentService.confirmPayment', () => {
       provider: 'STRIPE',
       amountMinor: 1000,
       currency: 'USD',
-      paymentType: 'CARD',
-    })
+    }, 'test-user')
 
     // Confirm payment first time
     const result1 = await PaymentService.confirmPayment({
