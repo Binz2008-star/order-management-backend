@@ -1,15 +1,11 @@
 import { prisma } from '@/server/db/prisma'
 import { getCurrentUser, requireSeller } from '@/server/lib/auth'
-import { ApiError, withParamsValidation, withValidation } from '@/server/lib/errors'
-import { IdSchema, UpdateProductSchema } from '@/server/lib/validation'
+import { ApiError } from '@/server/lib/errors'
 import { NextRequest, NextResponse } from 'next/server'
-import type { z } from 'zod'
-
-type UpdateProductData = z.infer<typeof UpdateProductSchema>
 
 async function updateProduct(
   { id }: { id: string },
-  productData: UpdateProductData,
+  productData: any,
   request: NextRequest
 ) {
   const user = await getCurrentUser(request)
@@ -99,15 +95,33 @@ async function deleteProduct({ id }: { id: string }, request: NextRequest) {
   return NextResponse.json({ success: true })
 }
 
-export const PATCH = withParamsValidation(
-  (params, request) =>
-    withValidation(UpdateProductSchema, (data, req) =>
-      updateProduct(params, data, req)
-    )(request),
-  IdSchema
-)
+export async function PATCH(
+  request: NextRequest,
+  { params }: { params: Promise<{ id: string }> }
+) {
+  try {
+    const { id } = await params
+    const body = await request.json()
+    return updateProduct({ id }, body, request)
+  } catch (_error) {
+    return NextResponse.json(
+      { error: 'Invalid parameters' },
+      { status: 400 }
+    )
+  }
+}
 
-export const DELETE = withParamsValidation(
-  (data: { id: string }, request: NextRequest) => deleteProduct(data, request),
-  IdSchema
-)
+export async function DELETE(
+  request: NextRequest,
+  { params }: { params: Promise<{ id: string }> }
+) {
+  try {
+    const { id } = await params
+    return deleteProduct({ id }, request)
+  } catch (_error) {
+    return NextResponse.json(
+      { error: 'Invalid parameters' },
+      { status: 400 }
+    )
+  }
+}

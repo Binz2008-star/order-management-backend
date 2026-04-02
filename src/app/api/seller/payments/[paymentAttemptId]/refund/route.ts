@@ -1,7 +1,6 @@
 import { prisma } from '@/server/db/prisma'
 import { getCurrentUser, requireSeller } from '@/server/lib/auth'
-import { ApiError, withParamsValidation } from '@/server/lib/errors'
-import { PaymentAttemptIdSchema } from '@/server/lib/validation'
+import { ApiError } from '@/server/lib/errors'
 import { PaymentService } from '@/server/services/payment.service'
 import { NextRequest, NextResponse } from 'next/server'
 
@@ -36,4 +35,17 @@ async function refundPayment(
   })
 }
 
-export const POST = withParamsValidation(refundPayment, PaymentAttemptIdSchema)
+export async function POST(
+  request: NextRequest,
+  { params }: { params: Promise<{ paymentAttemptId: string }> }
+) {
+  try {
+    const { paymentAttemptId } = await params
+    return refundPayment({ paymentAttemptId }, request)
+  } catch (_error) {
+    return NextResponse.json(
+      { error: 'Invalid parameters' },
+      { status: 400 }
+    )
+  }
+}

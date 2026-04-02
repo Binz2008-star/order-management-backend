@@ -1,7 +1,6 @@
 import { prisma } from '@/server/db/prisma'
 import { getCurrentUser, requireSeller } from '@/server/lib/auth'
-import { ApiError, withParamsValidation } from '@/server/lib/errors'
-import { IdSchema } from '@/server/lib/validation'
+import { ApiError } from '@/server/lib/errors'
 import { eventService } from '@/server/modules/orders/event.service'
 import { NextRequest, NextResponse } from 'next/server'
 
@@ -52,7 +51,17 @@ async function getOrderEvents(
   })
 }
 
-export const GET = withParamsValidation(
-  (params: { id: string }, request: NextRequest) => getOrderEvents(params, request),
-  IdSchema
-)
+export async function GET(
+  request: NextRequest,
+  { params }: { params: Promise<{ id: string }> }
+) {
+  try {
+    const { id } = await params
+    return getOrderEvents({ id }, request)
+  } catch (_error) {
+    return NextResponse.json(
+      { error: 'Invalid parameters' },
+      { status: 400 }
+    )
+  }
+}
