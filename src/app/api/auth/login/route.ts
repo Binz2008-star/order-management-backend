@@ -1,5 +1,5 @@
 import { authenticateUser } from '@/server/lib/auth'
-import { ApiError, withValidation } from '@/server/lib/errors'
+import { ApiError } from '@/server/lib/errors'
 import { RATE_LIMIT_CONFIGS, createRateLimit } from '@/server/lib/rate-limit-redis'
 import { NextRequest, NextResponse } from 'next/server'
 import { z } from 'zod'
@@ -15,7 +15,6 @@ const rateLimit = createRateLimit(RATE_LIMIT_CONFIGS.AUTH)
 async function login(loginData: unknown, request: NextRequest) {
   console.log('🚀 Login route called', {
     hasData: !!loginData,
-    headers: Object.fromEntries(request.headers.entries()),
     env: process.env.NODE_ENV
   })
 
@@ -64,8 +63,46 @@ async function logout() {
   return NextResponse.json({ success: true })
 }
 
-export const POST = withValidation(LoginSchema, (data, request) =>
-  login(data, request)
-)
+export async function POST(request: NextRequest) {
+  try {
+    // Parse JSON body with proper error handling
+    let body
+    try {
+      body = await request.json()
+    } catch (err) {
+      console.error('❌ Invalid JSON body:', err)
+      return NextResponse.json(
+        { error: 'Invalid JSON body. Please send valid application/json' },
+        { status: 400 }
+      )
+    }
+
+    // Validate required fields
+    if (!body || typeof body !== 'object') {
+      return NextResponse.json(
+        { error: 'Request body is required and must be an object' },
+        { status: 400 }
+      )
+    }
+
+    // Apply validation and login logic
+    try {
+      const validatedData = LoginSchema.parse(body)
+      return login(validatedData, request)
+    } catch (validationError) {
+      console.error('❌ Validation error:', validationError)
+      return NextResponse.json(
+        { error: 'Invalid email or password format' },
+        { status: 400 }
+      )
+    }
+  } catch (error) {
+    console.error('💥 Unexpected login error:', error)
+    return NextResponse.json(
+      { error: 'Internal server error' },
+      { status: 500 }
+    )
+  }
+}
 
 export const DELETE = logout
