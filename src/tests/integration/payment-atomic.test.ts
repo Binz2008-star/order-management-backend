@@ -1,0 +1,448 @@
+import type { Customer, Order, Product, Seller } from '@prisma/client'
+import { prisma } from '../../server/db/prisma'
+import { PaymentService } from '../../server/services/payment.service'
+
+describe('Payment Service - Atomic Operations', () => {
+  let seller: Seller
+  let customer: Customer
+  let product: Product
+  let order: Order
+
+  beforeEach(async () => {
+    // Clean setup for each test
+    await prisma.orderEvent.deleteMany()
+    await prisma.paymentAttempt.deleteMany()
+    await prisma.orderItem.deleteMany()
+    await prisma.order.deleteMany()
+    await prisma.customer.deleteMany()
+    await prisma.product.deleteMany()
+    await prisma.seller.deleteMany()
+    await prisma.user.deleteMany()
+
+    // Create test user first
+    const user = await prisma.user.create({
+      data: {
+        id: `user_${Date.now()}`,
+        email: `user_${Date.now()}@test.com`,
+        fullName: 'Test User',
+        passwordHash: 'hashed_password',
+        isActive: true
+      }
+    })
+
+    // Create test data
+    seller = await prisma.seller.create({
+      data: {
+        id: `seller_${Date.now()}`,
+        ownerUserId: user.id,
+        brandName: 'Test Brand',
+        slug: `test-brand-${Date.now()}`
+      }
+    })
+
+    customer = await prisma.customer.create({
+      data: {
+        id: `customer_${Date.now()}`,
+        sellerId: seller.id,
+        name: 'Test Customer',
+        phone: '+1234567890'
+      }
+    })
+
+    product = await prisma.product.create({
+      data: {
+        id: `product_${Date.now()}`,
+        sellerId: seller.id,
+        name: 'Test Product',
+        slug: `test-product-${Date.now()}`,
+        priceMinor: 1000,
+        currency: 'USD',
+        stockQuantity: 10,
+        isActive: true
+      }
+    })
+
+    order = await prisma.order.create({
+      data: {
+        id: `order_${Date.now()}`,
+        customerId: customer.id,
+        sellerId: seller.id,
+        publicOrderNumber: `ORD-${Date.now()}`,
+        status: 'PENDING',
+        paymentStatus: 'PENDING',
+        paymentType: 'PREPAID',
+        totalMinor: 2000,
+        currency: 'USD',
+        deliveryAddress: '123 Test St'
+      }
+    })
+
+    await prisma.orderItem.create({
+      data: {
+        orderId: order.id,
+        productId: product.id,
+        quantity: 2,
+        priceMinor: 1000,
+        currency: 'USD'
+      }
+    })
+  })
+
+  afterEach(async () => {
+    // Cleanup
+    await prisma.orderEvent.deleteMany()
+    await prisma.paymentAttempt.deleteMany()
+    await prisma.orderItem.deleteMany()
+    await prisma.order.deleteMany()
+    await prisma.customer.deleteMany()
+    await prisma.product.deleteMany()
+    await prisma.seller.deleteMany()
+  })
+
+  test('atomic payment creation - single transaction success', async () => {
+    const paymentAttempt = await PaymentService.createPaymentAttempt({
+      orderId: order.id,
+      provider: 'stripe',
+      amountMinor: 2000,
+      currency: 'USD',
+      providerReference: 'pi_test_atomic_1'
+    }, 'user-123')
+
+    // Verify all changes in single transaction
+    expect(paymentAttempt.status).toBe('PENDING')
+    expect(paymentAttempt.providerReference).toBe('pi_test_atomic_1')
+
+    // Verify order unchanged (payment not completed yet)
+    const updatedOrder = await prisma.order.findUnique({ where: { id: order.id } })
+    expect(updatedOrder.paymentStatus).toBe('PENDING')
+    expect(updatedOrder.status).toBe('PENDING')
+
+    // Verify event created
+    const events = await prisma.orderEvent.findMany({ where: { orderId: order.id } })
+    expect(events).toHaveLength(1)
+    expect(events[0].eventType).toBe('PAYMENT_INITIATED')
+    expect(events[0].actorUserId).toBe('user-123')
+  })
+
+  test('atomic payment completion - all changes succeed or fail together', async () => {
+    // Create payment attempt first
+    const payment = await PaymentService.createPaymentAttempt({
+      orderId: order.id,
+      provider: 'stripe',
+      amountMinor: 2000,
+      currency: 'USD'
+    }, 'user-123')
+
+    // Complete payment atomically
+    const result = await PaymentService.completePayment(
+      payment.id,
+      'pi_test_complete_1',
+      'user-123'
+    )
+
+    // Verify atomic changes
+    expect(result.paymentStatus).toBe('PAID')
+    expect(result.orderStatus).toBe('CONFIRMED') // Auto-confirmed from PENDING
+
+    // Verify payment attempt updated
+    const updatedPayment = await prisma.paymentAttempt.findUnique({
+      where: { id: payment.id }
+    })
+    expect(updatedPayment.status).toBe('COMPLETED')
+    expect(updatedPayment.providerReference).toBe('pi_test_complete_1')
+
+    // Verify order updated
+    const updatedOrder = await prisma.order.findUnique({ where: { id: order.id } })
+    expect(updatedOrder.paymentStatus).toBe('PAID')
+    expect(updatedOrder.status).toBe('CONFIRMED')
+
+    // Verify all events created
+    const events = await prisma.orderEvent.findMany({ where: { orderId: order.id } })
+    expect(events).toHaveLength(4) // CREATED + INITIATED + CONFIRMED + COMPLETED
+
+    const eventTypes = events.map(e => e.eventType)
+    expect(eventTypes).toContain('PAYMENT_INITIATED')
+    expect(eventTypes).toContain('PAYMENT_CONFIRMED')
+    expect(eventTypes).toContain('STATUS_CHANGED')
+
+    // Verify status change event details
+    const statusChangeEvent = events.find(e => e.eventType === 'STATUS_CHANGED')
+    const payload = JSON.parse(statusChangeEvent.payloadJson)
+    expect(payload.from).toBe('PENDING')
+    expect(payload.to).toBe('CONFIRMED')
+    expect(payload.reason).toBe('Payment completed')
+  })
+
+  test('atomic payment failure - consistent state maintained', async () => {
+    // Create payment attempt first
+    const payment = await PaymentService.createPaymentAttempt({
+      orderId: order.id,
+      provider: 'stripe',
+      amountMinor: 2000,
+      currency: 'USD'
+    }, 'user-123')
+
+    // Fail payment atomically
+    const result = await PaymentService.failPayment(
+      payment.id,
+      'insufficient_funds',
+      'user-123'
+    )
+
+    // Verify atomic changes
+    expect(result.paymentStatus).toBe('FAILED')
+    expect(result.orderStatus).toBe('PENDING') // Order status unchanged
+
+    // Verify payment attempt updated
+    const updatedPayment = await prisma.paymentAttempt.findUnique({
+      where: { id: payment.id }
+    })
+    expect(updatedPayment.status).toBe('FAILED')
+
+    // Verify order payment status updated
+    const updatedOrder = await prisma.order.findUnique({ where: { id: order.id } })
+    expect(updatedOrder.paymentStatus).toBe('FAILED')
+    expect(updatedOrder.status).toBe('PENDING') // Order status unchanged
+
+    // Verify failure event created
+    const events = await prisma.orderEvent.findMany({ where: { orderId: order.id } })
+    const paymentFailedEvent = events.find(e => e.eventType === 'PAYMENT_FAILED')
+    expect(paymentFailedEvent).toBeDefined()
+
+    const payload = JSON.parse(paymentFailedEvent.payloadJson)
+    expect(payload.failureReason).toBe('insufficient_funds')
+  })
+
+  test('concurrent payment attempts - only one succeeds', async () => {
+    // Create multiple payment attempts simultaneously
+    const promises = Array.from({ length: 10 }, (_, i) =>
+      PaymentService.createPaymentAttempt({
+        orderId: order.id,
+        provider: 'stripe',
+        amountMinor: 2000,
+        currency: 'USD',
+        metadata: { attempt: i }
+      }, 'user-123')
+    )
+
+    const results = await Promise.allSettled(promises)
+
+    // Exactly one should succeed
+    const successful = results.filter(r => r.status === 'fulfilled')
+    const failed = results.filter(r => r.status === 'rejected')
+
+    expect(successful).toHaveLength(1)
+    expect(failed).toHaveLength(9)
+
+    // Verify only one payment attempt exists in database
+    const paymentAttempts = await prisma.paymentAttempt.findMany({
+      where: { orderId: order.id }
+    })
+    expect(paymentAttempts).toHaveLength(1)
+
+    // Verify only one payment initiation event
+    const events = await prisma.orderEvent.findMany({
+      where: { orderId: order.id, eventType: 'PAYMENT_INITIATED' }
+    })
+    expect(events).toHaveLength(1)
+  })
+
+  test('provider reference idempotency - duplicate rejected', async () => {
+    // First payment attempt with provider reference
+    const payment1 = await PaymentService.createPaymentAttempt({
+      orderId: order.id,
+      provider: 'stripe',
+      amountMinor: 2000,
+      currency: 'USD',
+      providerReference: 'pi_duplicate_test_123'
+    }, 'user-123')
+
+    // Complete first payment
+    await PaymentService.completePayment(payment1.id, 'pi_duplicate_test_123', 'user-123')
+
+    // Try to create another payment with same provider reference
+    const payment2 = await PaymentService.createPaymentAttempt({
+      orderId: order.id,
+      provider: 'stripe',
+      amountMinor: 3000,
+      currency: 'USD',
+      providerReference: 'pi_duplicate_test_123'
+    }, 'user-123')
+
+    // Should return existing payment attempt
+    expect(payment2.id).toBe(payment1.id)
+    expect(payment2.providerReference).toBe('pi_duplicate_test_123')
+
+    // Verify no new payment created
+    const paymentAttempts = await prisma.paymentAttempt.findMany({
+      where: { orderId: order.id }
+    })
+    expect(paymentAttempts).toHaveLength(1)
+  })
+
+  test('refund atomicity - consistent state maintained', async () => {
+    // Create and complete payment first
+    const payment = await PaymentService.createPaymentAttempt({
+      orderId: order.id,
+      provider: 'stripe',
+      amountMinor: 2000,
+      currency: 'USD'
+    }, 'user-123')
+
+    await PaymentService.completePayment(payment.id, 'pi_refund_test', 'user-123')
+
+    // Process refund atomically
+    const refundResult = await PaymentService.refundPayment(
+      payment.id,
+      1500,
+      'customer_request',
+      'user-123'
+    )
+
+    // Verify atomic changes
+    expect(refundResult.paymentStatus).toBe('REFUNDED')
+    expect(refundResult.refundAmountMinor).toBe(1500)
+
+    // Verify payment attempt updated
+    const updatedPayment = await prisma.paymentAttempt.findUnique({
+      where: { id: payment.id }
+    })
+    expect(updatedPayment.status).toBe('REFUNDED')
+
+    // Verify order payment status updated
+    const updatedOrder = await prisma.order.findUnique({ where: { id: order.id } })
+    expect(updatedOrder.paymentStatus).toBe('REFUNDED')
+
+    // Verify refund event created
+    const events = await prisma.orderEvent.findMany({ where: { orderId: order.id } })
+    const refundEvent = events.find(e => e.eventType === 'PAYMENT_REFUNDED')
+    expect(refundEvent).toBeDefined()
+
+    const payload = JSON.parse(refundEvent.payloadJson)
+    expect(payload.amountMinor).toBe(1500)
+  })
+
+  test('COD payment attempts rejected - invariant enforced', async () => {
+    // Create COD order
+    const codOrder = await prisma.order.create({
+      data: {
+        id: `cod_order_${Date.now()}`,
+        customerId: customer.id,
+        sellerId: seller.id,
+        publicOrderNumber: `COD-${Date.now()}`,
+        status: 'PENDING',
+        paymentStatus: 'PENDING',
+        paymentType: 'CASH_ON_DELIVERY',
+        totalMinor: 2000,
+        currency: 'USD',
+        deliveryAddress: '123 Test St'
+      }
+    })
+
+    // Try to create payment attempt on COD order
+    await expect(
+      PaymentService.createPaymentAttempt({
+        orderId: codOrder.id,
+        provider: 'stripe',
+        amountMinor: 2000,
+        currency: 'USD'
+      }, 'user-123')
+    ).rejects.toThrow('Payment attempts not allowed for Cash on Delivery orders')
+
+    // Verify no payment attempt created
+    const paymentAttempts = await prisma.paymentAttempt.findMany({
+      where: { orderId: codOrder.id }
+    })
+    expect(paymentAttempts).toHaveLength(0)
+
+    // Verify no events created
+    const events = await prisma.orderEvent.findMany({
+      where: { orderId: codOrder.id }
+    })
+    expect(events).toHaveLength(0)
+  })
+
+  test('invalid payment transitions rejected - state machine enforced', async () => {
+    // Create payment attempt
+    const payment = await PaymentService.createPaymentAttempt({
+      orderId: order.id,
+      provider: 'stripe',
+      amountMinor: 2000,
+      currency: 'USD'
+    }, 'user-123')
+
+    // Try to jump directly to REFUNDED from PENDING (invalid)
+    await expect(
+      PaymentService.failPayment(payment.id, 'test', 'user-123')
+    ).resolves.toBeDefined() // PENDING -> FAILED is valid
+
+    // Try to refund a failed payment (invalid)
+    await expect(
+      PaymentService.refundPayment(payment.id, 1000, 'test', 'user-123')
+    ).rejects.toThrow('Only completed payments can be refunded')
+
+    // Verify payment still in FAILED state
+    const updatedPayment = await prisma.paymentAttempt.findUnique({
+      where: { id: payment.id }
+    })
+    expect(updatedPayment.status).toBe('FAILED')
+  })
+
+  test('refund amount validation - over-refund prevented', async () => {
+    // Create and complete payment
+    const payment = await PaymentService.createPaymentAttempt({
+      orderId: order.id,
+      provider: 'stripe',
+      amountMinor: 2000,
+      currency: 'USD'
+    }, 'user-123')
+
+    await PaymentService.completePayment(payment.id, 'pi_overrefund_test', 'user-123')
+
+    // Try to refund more than original amount
+    await expect(
+      PaymentService.refundPayment(payment.id, 2500, 'test', 'user-123')
+    ).rejects.toThrow('Refund amount $25.00 exceeds original payment $20.00')
+
+    // Verify payment still in COMPLETED state
+    const updatedPayment = await prisma.paymentAttempt.findUnique({
+      where: { id: payment.id }
+    })
+    expect(updatedPayment.status).toBe('COMPLETED')
+  })
+
+  test('audit trail completeness - no null actors', async () => {
+    // Complete payment flow
+    const payment = await PaymentService.createPaymentAttempt({
+      orderId: order.id,
+      provider: 'stripe',
+      amountMinor: 2000,
+      currency: 'USD'
+    }, 'user-123')
+
+    await PaymentService.completePayment(payment.id, 'pi_audit_test', 'user-123')
+
+    // Verify all events have actorUserId
+    const events = await prisma.orderEvent.findMany({ where: { orderId: order.id } })
+    events.forEach(event => {
+      expect(event.actorUserId).not.toBeNull()
+      expect(event.actorUserId).not.toBe('')
+    })
+
+    // Verify all payloads have required fields
+    events.forEach(event => {
+      const payload = JSON.parse(event.payloadJson)
+      expect(payload).toHaveProperty('actor')
+      expect(payload).toHaveProperty('timestamp')
+    })
+
+    // Verify payment events have provider metadata
+    const paymentEvents = events.filter(e => e.eventType.includes('PAYMENT'))
+    paymentEvents.forEach(event => {
+      const payload = JSON.parse(event.payloadJson)
+      expect(payload).toHaveProperty('provider')
+      expect(payload).toHaveProperty('amountMinor')
+      expect(payload).toHaveProperty('currency')
+    })
+  })
+})
