@@ -10,4 +10,7 @@ async function getPublicOrders(
   throw new ApiError(501, 'Not implemented yet')
 }
 
-export const GET = withParamsValidation(getPublicOrders, SellerSlugSchema)
+export const GET = withParamsValidation(
+  (params: { sellerSlug: string }, request: NextRequest) => getPublicOrders(params, request),
+  SellerSlugSchema
+)

@@ -107,7 +107,7 @@ export const PATCH = withParamsValidation(
   IdSchema
 )
 
-export const DELETE = withParamsValidation((data, request) =>
-  deleteProduct(data, request),
+export const DELETE = withParamsValidation(
+  (data: { id: string }, request: NextRequest) => deleteProduct(data, request),
   IdSchema
 )
