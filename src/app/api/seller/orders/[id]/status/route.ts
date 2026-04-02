@@ -6,6 +6,16 @@ import { OrderTransitionError } from '@/server/modules/orders/transitions'
 import { orderService } from '@/server/services/order.service'
 import { NextRequest, NextResponse } from 'next/server'
 
+function isOrderTransitionError(error: unknown): error is OrderTransitionError {
+  return (
+    error instanceof OrderTransitionError ||
+    (typeof error === 'object' &&
+      error !== null &&
+      'name' in error &&
+      (error as { name?: string }).name === 'OrderTransitionError')
+  )
+}
+
 export async function PATCH(
   request: NextRequest,
   context: { params: unknown }
@@ -47,7 +57,7 @@ export async function PATCH(
       },
     })
   } catch (error: unknown) {
-    if (error instanceof OrderTransitionError) {
+    if (isOrderTransitionError(error)) {
       return NextResponse.json(
         { error: error.message },
         { status: 400 }
