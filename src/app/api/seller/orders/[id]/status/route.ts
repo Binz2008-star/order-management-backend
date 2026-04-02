@@ -46,9 +46,9 @@ async function updateOrderStatus(
 }
 
 export const PATCH = withParamsValidation(
-  (params: { id: string }, request: NextRequest) =>
+  IdSchema,
+  (params, request) =>
     withValidation(UpdateOrderStatusSchema, (data, req) =>
       updateOrderStatus(params, data, req)
-    )(request),
-  IdSchema
+    )(request)
 )
