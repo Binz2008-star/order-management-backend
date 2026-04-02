@@ -99,6 +99,10 @@ export const IdSchema = z.object({
   id: cuidLikeId,
 })
 
+export const PaymentAttemptIdSchema = z.object({
+  paymentAttemptId: cuidLikeId,
+})
+
 export const PaginationSchema = z.object({
   page: z.coerce.number().int('Page must be an integer').min(1).default(1),
   limit: z.coerce.number().int('Limit must be an integer').min(1).max(100).default(20),
@@ -111,4 +115,5 @@ export type UpdateProductInput = z.infer<typeof UpdateProductSchema>
 export type UpdateOrderStatusInput = z.infer<typeof UpdateOrderStatusSchema>
 export type SellerSlugInput = z.infer<typeof SellerSlugSchema>
 export type IdInput = z.infer<typeof IdSchema>
+export type PaymentAttemptIdInput = z.infer<typeof PaymentAttemptIdSchema>
 export type PaginationInput = z.infer<typeof PaginationSchema>

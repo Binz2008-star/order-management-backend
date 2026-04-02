@@ -1,9 +1,8 @@
-import { NextRequest, NextResponse } from 'next/server'
-import { getCurrentUser, requireSeller } from '@/server/lib/auth'
-import { withParamsValidation, ApiError } from '@/server/lib/errors'
-import { IdSchema } from '@/server/lib/validation'
-import { PaymentService } from '@/server/services/payment.service'
 import { prisma } from '@/server/db/prisma'
+import { getCurrentUser, requireSeller } from '@/server/lib/auth'
+import { ApiError, withParamsValidation } from '@/server/lib/errors'
+import { PaymentService } from '@/server/services/payment.service'
+import { NextRequest, NextResponse } from 'next/server'
 
 async function refundPayment(
   { paymentAttemptId }: { paymentAttemptId: string },
@@ -36,4 +35,4 @@ async function refundPayment(
   })
 }
 
-export const POST = withParamsValidation(refundPayment, IdSchema)
+export const POST = withParamsValidation(refundPayment, PaymentAttemptIdSchema)
