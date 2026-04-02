@@ -1,6 +1,6 @@
 import { prisma } from '@/server/db/prisma'
 import { logger } from '@/server/lib/logger'
-import { createOrderEvent } from '@/server/modules/orders/event.service'
+import { PaymentService } from '@/server/services/payment.service'
 import { NextRequest, NextResponse } from 'next/server'
 
 // Payment constants (since schema uses strings, not enums)
@@ -9,7 +9,7 @@ const PAYMENT_PROVIDER = {
   SIMULATOR: 'SIMULATOR',
 } as const
 
-const PAYMENT_STATUS = {
+const _PAYMENT_STATUS = {
   PENDING: 'PENDING',
   PAID: 'PAID',
   FAILED: 'FAILED',
@@ -72,56 +72,41 @@ async function processStripeWebhook(request: NextRequest) {
           processedAt: new Date(),
         },
       })
+    })
 
-      // Handle payment success
-      if (event.type === 'payment_intent.succeeded') {
-        const paymentIntent = event.data.object
+    // Handle payment success outside of webhook transaction
+    if (event.type === 'payment_intent.succeeded') {
+      const paymentIntent = event.data.object
 
-        // Find payment attempt
-        const paymentAttempt = await tx.paymentAttempt.findFirst({
-          where: {
-            provider: PAYMENT_PROVIDER.STRIPE,
+      // Find payment attempt
+      const paymentAttempt = await prisma.paymentAttempt.findFirst({
+        where: {
+          provider: PAYMENT_PROVIDER.STRIPE,
+          providerReference: paymentIntent.id,
+        },
+      })
+
+      if (paymentAttempt) {
+        // Use PaymentService for proper event enforcement and transaction integrity
+        await PaymentService.updatePaymentStatus({
+          paymentAttemptId: paymentAttempt.id,
+          status: 'PAID',
+          actorUserId: null, // System event
+          metadata: {
+            provider: 'STRIPE',
             providerReference: paymentIntent.id,
+            rawPayload: event,
           },
         })
 
-        if (paymentAttempt) {
-          // Update payment attempt
-          await tx.paymentAttempt.update({
-            where: { id: paymentAttempt.id },
-            data: {
-              status: PAYMENT_STATUS.PAID,
-              rawPayloadJson: event,
-            },
-          })
-
-          // Update order payment status
-          await tx.order.update({
-            where: { id: paymentAttempt.orderId },
-            data: { paymentStatus: PAYMENT_STATUS.PAID },
-          })
-
-          // Create order event through centralized service
-          await createOrderEvent(tx, {
-            orderId: paymentAttempt.orderId,
-            eventType: 'payment_completed',
-            actorUserId: null, // System event
-            payload: {
-              paymentAttemptId: paymentAttempt.id,
-              provider: 'STRIPE',
-              amount: paymentAttempt.amountMinor,
-            },
-          })
-
-          logger.info('Payment processed successfully', {
-            provider: PAYMENT_PROVIDER.STRIPE,
-            paymentIntentId: paymentIntent.id,
-            orderId: paymentAttempt.orderId,
-            amount: paymentIntent.amount,
-          })
-        }
+        logger.info('Payment processed successfully', {
+          provider: PAYMENT_PROVIDER.STRIPE,
+          paymentIntentId: paymentIntent.id,
+          orderId: paymentAttempt.orderId,
+          amount: paymentIntent.amount,
+        })
       }
-    })
+    }
 
     return NextResponse.json({ status: 'processed' })
   } catch (error) {
