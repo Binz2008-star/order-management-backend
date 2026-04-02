@@ -29,7 +29,7 @@ describe('Basic System Tests', () => {
 
     expect(user.id).toBe(userData.id)
     expect(user.email).toBe(userData.email)
-    expect((user as any).passwordHash).toBe(userData.passwordHash)
+    expect((user as { passwordHash: string }).passwordHash).toBe(userData.passwordHash)
     expect(user.isActive).toBe(true)
 
     // Cleanup

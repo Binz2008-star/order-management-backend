@@ -25,7 +25,7 @@ async function processWhatsAppWebhook(request: NextRequest) {
     })
 
     return NextResponse.json({ status: 'processed' })
-  } catch (error) {
+  } catch (error: unknown) {
     logger.error('WhatsApp webhook processing failed', error as Error)
     return NextResponse.json(
       { error: 'Webhook processing failed' },

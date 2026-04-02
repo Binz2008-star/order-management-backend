@@ -58,7 +58,7 @@ beforeEach(async () => {
   await prisma.user.deleteMany()
 })
 
-  ; (global as any).prisma = prisma
+  ; (global as typeof global & { prisma: typeof prisma }).prisma = prisma
 
 export { prisma }
 
