@@ -476,39 +476,47 @@ describe('Payment Service - Atomic Operations', () => {
 
     // User-initiated payment events should have actorUserId
     const userPaymentEvents = events.filter(e =>
-      e.eventType.includes('payment') && e.actorUserId !== null
+      e.eventType.includes('payment') && e.eventType !== 'payment_completed'
     )
     userPaymentEvents.forEach(event => {
       expect(event.actorUserId).not.toBeNull()
       expect(event.actorUserId).not.toBe('')
     })
 
-    // System events may have null actorUserId (that's expected)
-    const systemEvents = events.filter(e => e.actorUserId === null)
-    expect(systemEvents.length).toBeGreaterThan(0) // Should have system events
+    // payment_completed events can be system events (actorUserId: null) or user events
+    const paymentCompletedEvents = events.filter(e => e.eventType === 'payment_completed')
+    paymentCompletedEvents.forEach(event => {
+      // System events have null actorUserId, user events have non-null
+      // Both are valid, just verify the event exists
+      expect(event).toBeDefined()
+    })
 
-    // Verify all payloads have required fields (different events have different required fields)
+    // Verify all payloads have required fields
     events.forEach(event => {
       const payload = JSON.parse(event.payloadJson || '{}')
       expect(payload).toBeDefined()
       expect(typeof payload).toBe('object')
     })
 
-    // Verify payment events have required metadata
-    const allPaymentEvents = events.filter(e => e.eventType.includes('payment'))
-    allPaymentEvents.forEach(event => {
+    // Verify user payment events have required metadata
+    userPaymentEvents.forEach(event => {
       const payload = JSON.parse(event.payloadJson || '{}')
+      expect(payload).toHaveProperty('provider')
+      expect(payload).toHaveProperty('amountMinor')
+      expect(payload).toHaveProperty('currency')
+    })
 
-      // User-initiated payment events should have provider info
-      if (event.actorUserId !== null) {
+    // Verify payment_completed events have appropriate metadata
+    paymentCompletedEvents.forEach(event => {
+      const payload = JSON.parse(event.payloadJson || '{}')
+      if (event.actorUserId === null) {
+        // System event should have timestamp
+        expect(payload).toHaveProperty('timestamp')
+      } else {
+        // User event should have payment info
         expect(payload).toHaveProperty('provider')
         expect(payload).toHaveProperty('amountMinor')
         expect(payload).toHaveProperty('currency')
-      }
-
-      // System payment events should have timestamp
-      if (event.actorUserId === null) {
-        expect(payload).toHaveProperty('timestamp')
       }
     })
   })

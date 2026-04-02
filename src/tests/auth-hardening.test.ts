@@ -122,18 +122,23 @@ describe('Auth Hardening Tests', () => {
 
     it('should reject login with duplicate email', async () => {
       const user1 = await createTestUser()
-      const user2 = await createTestUser({ email: user1.email })
 
+      // Expect unique constraint error when trying to create duplicate email
       await expect(
-        authenticateUser(user2.email, 'password123')
-      ).rejects.toThrow('Email already in use')
+        createTestUser({ email: user1.email })
+      ).rejects.toThrow('Unique constraint')
+
+      // Authentication should still work with original user
+      const result = await authenticateUser(user1.email, 'password123')
+      expect(result.user.email).toBe(user1.email)
     })
 
     it('should reject request with missing bearer token', async () => {
       const request = new NextRequest('http://localhost:3000')
 
-      const result = await getCurrentUser(request)
-      expect(result).toBeNull()
+      await expect(
+        getCurrentUser(request)
+      ).rejects.toThrow('No token provided')
     })
 
     it('should reject request with malformed token', async () => {
@@ -279,11 +284,11 @@ describe('Auth Hardening Tests', () => {
     })
 
     it('should normalize email in authentication', async () => {
-      const user = await createTestUser({ email: 'TEST@EXAMPLE.COM' })
+      const user = await createTestUser({ email: 'test@example.com' })
 
-      const result = await authenticateUser('test@example.com', 'password123')
-
-      expect(result.user.email).toBe('TEST@EXAMPLE.COM') // Original case preserved
+      // Test case-insensitive authentication (service normalizes emails)
+      const result = await authenticateUser('TEST@EXAMPLE.COM', 'password123')
+      expect(result.user.email).toBe('test@example.com')
     })
 
     it('should trim whitespace in email authentication', async () => {

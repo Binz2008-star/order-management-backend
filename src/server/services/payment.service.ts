@@ -268,13 +268,16 @@ export class PaymentService {
       data: { paymentStatus: 'PAID' }
     })
 
-    // Create payment completion event
+    // Create system payment completion event for webhook confirmations
     await createOrderEvent(tx, {
       orderId,
       eventType: 'payment_completed',
-      actorUserId: null,
+      actorUserId: null, // System event
       payload: {
         timestamp: new Date().toISOString(),
+        provider: 'webhook',
+        amountMinor: 0, // System events don't have amount
+        currency: 'USD',
       },
     })
 

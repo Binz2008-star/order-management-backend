@@ -102,12 +102,11 @@ describe('Stripe Webhook Event Enforcement Regression Tests', () => {
       expect(finalOrder?.paymentStatus).toBe('PAID')
 
       // Verify payment_completed event created only once
-      const paymentCompletedEvents = await prisma.orderEvent.findMany({
-        where: {
-          orderId: order.id,
-          eventType: 'payment_completed'
-        },
+      const events = await prisma.orderEvent.findMany({
+        where: { orderId: order.id },
+        orderBy: { createdAt: 'asc' },
       })
+      const paymentCompletedEvents = events.filter(e => e.eventType === 'payment_completed')
       expect(paymentCompletedEvents.length).toBe(1)
 
       // Verify status_changed event created only once
@@ -263,12 +262,11 @@ describe('Stripe Webhook Event Enforcement Regression Tests', () => {
       })
 
       // Verify payment_completed event created exactly once
-      const paymentCompletedEvents = await prisma.orderEvent.findMany({
-        where: {
-          orderId: order.id,
-          eventType: 'payment_completed'
-        },
+      const events = await prisma.orderEvent.findMany({
+        where: { orderId: order.id },
+        orderBy: { createdAt: 'asc' },
       })
+      const paymentCompletedEvents = events.filter(e => e.eventType === 'payment_completed')
       expect(paymentCompletedEvents.length).toBe(1)
 
       // Verify event payload is truthful

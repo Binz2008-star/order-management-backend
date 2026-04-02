@@ -92,10 +92,14 @@ describe('PaymentService.confirmPayment', () => {
       orderBy: { createdAt: 'asc' },
     })
 
-    console.log('Events created:', events.map(e => ({ type: e.eventType, payload: e.payloadJson })))
+    console.log('Events created:', events.map(e => ({ type: e.eventType, payload: e.payloadJson, actor: e.actorUserId })))
     expect(events.length).toBeGreaterThan(0)
     expect(events.some(e => e.eventType === 'payment_completed')).toBe(true)
     expect(events.some(e => e.eventType === 'status_changed')).toBe(true)
+
+    // Verify payment_completed event is a system event (actorUserId: null)
+    const paymentCompletedEvent = events.find(e => e.eventType === 'payment_completed')
+    expect(paymentCompletedEvent?.actorUserId).toBeNull()
   })
 
   it('should be idempotent - duplicate confirmations should not duplicate effects', async () => {
@@ -176,14 +180,13 @@ describe('PaymentService.confirmPayment', () => {
     expect(result2.status).toBe('COMPLETED')
 
     // Verify events were not duplicated
-    const paymentCompletedEvents = await prisma.orderEvent.findMany({
-      where: {
-        orderId: order.id,
-        eventType: 'payment_completed'
-      },
+    const events = await prisma.orderEvent.findMany({
+      where: { orderId: order.id },
+      orderBy: { createdAt: 'asc' },
     })
 
     // Should only have one payment_completed event
+    const paymentCompletedEvents = events.filter(e => e.eventType === 'payment_completed')
     expect(paymentCompletedEvents.length).toBe(1)
   })
 })
