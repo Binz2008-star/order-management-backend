@@ -36,23 +36,32 @@ jobs:
       - name: Run typecheck
         run: npx tsc --noEmit
 
-      - name: Debug Prisma
+      - name: Debug Prisma and test DB
         run: |
-          echo "=== Prisma Status ==="
-          npx prisma db pull
+          echo "=== Prisma version ==="
+          npx prisma --version
+          echo "=== Confirm database file ==="
+          ls -la
+          echo "=== SQLite file check ==="
+          test -f ./test.db && echo "test.db exists" || echo "test.db missing"
         env:
           DATABASE_URL: file:./test.db
 
+      - name: Debug test environment
+        run: |
+          echo "NODE_ENV=$NODE_ENV"
+          echo "DATABASE_URL=$DATABASE_URL"
+          echo "PWD=$(pwd)"
+          echo "=== Files ==="
+          ls -la
+        env:
+          DATABASE_URL: file:./test.db
+          NODE_ENV: test
+
       - name: Run tests
         run: |
-          echo "=== ENV ==="
-          env | sort
-
-          echo "=== DB FILE ==="
-          ls -la
-
           echo "=== Running Vitest ==="
-          npx vitest run --reporter=verbose --run
+          npx vitest run --reporter=verbose
         env:
           DATABASE_URL: file:./test.db
           NODE_ENV: test
