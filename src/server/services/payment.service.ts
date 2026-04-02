@@ -362,26 +362,13 @@ export class PaymentService {
         }
       })
 
-      if (!attempt) {
-        throw new Error('Payment attempt not found')
-      }
-
-      if (attempt.status !== 'PENDING') {
-        // Idempotency: already processed
-        logger.warn('Payment attempt already processed', {
-          paymentAttemptId: data.paymentAttemptId,
-          currentStatus: attempt.status
-        })
-        return attempt
-      }
-
-      if (attempt.provider !== data.provider) {
-        throw new Error('Provider mismatch')
-      }
-
-      // Update payment attempt
-      const updatedAttempt = await tx.paymentAttempt.update({
-        where: { id: data.paymentAttemptId },
+      // Atomic update with race condition protection
+      const updateResult = await tx.paymentAttempt.updateMany({
+        where: {
+          id: data.paymentAttemptId,
+          status: 'PENDING', // Only update if still PENDING
+          provider: data.provider, // Enforce provider match atomically
+        },
         data: {
           status: 'COMPLETED',
           providerReference: data.providerReference,
@@ -389,8 +376,39 @@ export class PaymentService {
         }
       })
 
+      if (updateResult.count === 0) {
+        // Check if it was already processed or provider mismatch
+        const existingAttempt = await tx.paymentAttempt.findUnique({
+          where: { id: data.paymentAttemptId }
+        })
+
+        if (!existingAttempt) {
+          throw new Error('Payment attempt not found')
+        }
+
+        if (existingAttempt.provider !== data.provider) {
+          throw new Error('Provider mismatch')
+        }
+
+        // Already processed by another concurrent request
+        logger.warn('Payment attempt already processed (idempotent)', {
+          paymentAttemptId: data.paymentAttemptId,
+          currentStatus: existingAttempt.status
+        })
+        return existingAttempt
+      }
+
+      // Get the updated attempt for further processing
+      const updatedAttempt = await tx.paymentAttempt.findUnique({
+        where: { id: data.paymentAttemptId }
+      })
+
+      if (!updatedAttempt) {
+        throw new Error('Payment attempt not found after update')
+      }
+
       // Handle payment completion (order status transition + events)
-      await this.handlePaymentCompletion(tx, attempt.orderId)
+      await this.handlePaymentCompletion(tx, updatedAttempt.orderId)
 
       return updatedAttempt
     })
