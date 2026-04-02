@@ -1,5 +1,6 @@
 import { Prisma } from '@prisma/client'
 import { prisma } from '../db/prisma'
+import { logger } from '../lib/logger'
 import { createOrderEvent } from '../modules/orders/event.service'
 
 type Tx = Prisma.TransactionClient
@@ -261,6 +262,16 @@ export class PaymentService {
       data: { paymentStatus: 'PAID' }
     })
 
+    // Create payment completion event
+    await createOrderEvent(tx, {
+      orderId,
+      eventType: 'payment_completed',
+      actorUserId: null,
+      payload: {
+        timestamp: new Date().toISOString(),
+      },
+    })
+
     const order = await tx.order.findUnique({ where: { id: orderId } })
     if (order && order.status === 'PENDING') {
       await tx.order.update({
@@ -318,6 +329,61 @@ export class PaymentService {
         createdAt: true,
         updatedAt: true,
       }
+    })
+  }
+
+  static async confirmPayment(data: {
+    paymentAttemptId: string
+    provider: string
+    providerReference: string
+    rawPayload?: Record<string, unknown>
+  }) {
+    return prisma.$transaction(async (tx) => {
+      // Get payment attempt with order details
+      const attempt = await tx.paymentAttempt.findUnique({
+        where: { id: data.paymentAttemptId },
+        include: {
+          order: {
+            select: {
+              id: true,
+              status: true,
+              paymentStatus: true,
+            }
+          }
+        }
+      })
+
+      if (!attempt) {
+        throw new Error('Payment attempt not found')
+      }
+
+      if (attempt.status !== 'PENDING') {
+        // Idempotency: already processed
+        logger.warn('Payment attempt already processed', {
+          paymentAttemptId: data.paymentAttemptId,
+          currentStatus: attempt.status
+        })
+        return attempt
+      }
+
+      if (attempt.provider !== data.provider) {
+        throw new Error('Provider mismatch')
+      }
+
+      // Update payment attempt
+      const updatedAttempt = await tx.paymentAttempt.update({
+        where: { id: data.paymentAttemptId },
+        data: {
+          status: 'COMPLETED',
+          providerReference: data.providerReference,
+          rawPayloadJson: data.rawPayload ? JSON.stringify(data.rawPayload) : null,
+        }
+      })
+
+      // Handle payment completion (order status transition + events)
+      await this.handlePaymentCompletion(tx, attempt.orderId)
+
+      return updatedAttempt
     })
   }
 

@@ -88,15 +88,11 @@ async function processStripeWebhook(request: NextRequest) {
 
       if (paymentAttempt) {
         // Use PaymentService for proper event enforcement and transaction integrity
-        await PaymentService.updatePaymentStatus({
+        await PaymentService.confirmPayment({
           paymentAttemptId: paymentAttempt.id,
-          status: 'PAID',
-          actorUserId: null, // System event
-          metadata: {
-            provider: 'STRIPE',
-            providerReference: paymentIntent.id,
-            rawPayload: event,
-          },
+          provider: 'STRIPE',
+          providerReference: paymentIntent.id,
+          rawPayload: event,
         })
 
         logger.info('Payment processed successfully', {
