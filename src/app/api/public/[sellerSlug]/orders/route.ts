@@ -1,5 +1,3 @@
-import { ApiError, withParamsValidation } from '@/server/lib/errors'
-import { SellerSlugSchema } from '@/server/lib/validation'
 import { NextRequest, NextResponse } from 'next/server'
 
 async function getPublicOrders(
@@ -7,10 +5,20 @@ async function getPublicOrders(
   _request: NextRequest
 ): Promise<NextResponse> {
   // TODO: Implement public orders endpoint
-  throw new ApiError(501, 'Not implemented yet')
+  throw new Error('Not implemented yet')
 }
 
-export const GET = withParamsValidation(
-  (params: { sellerSlug: string }, request: NextRequest) => getPublicOrders(params, request),
-  SellerSlugSchema
-)
+export async function GET(
+  request: NextRequest,
+  { params }: { params: Promise<{ sellerSlug: string }> }
+) {
+  try {
+    const { sellerSlug } = await params
+    return getPublicOrders({ sellerSlug }, request)
+  } catch (_error) {
+    return NextResponse.json(
+      { error: 'Invalid parameters' },
+      { status: 400 }
+    )
+  }
+}
