@@ -14,11 +14,11 @@ async function updateOrderStatus(
   requireSeller(user)
 
   try {
-    const updatedOrder = await orderService.updateOrderStatus({
+    const updatedOrder = await orderService.applyTransition({
       orderId: id,
       newStatus: status,
       actorUserId: user.id,
-      reason
+      notes: reason
     })
 
     // Verify seller access
@@ -46,9 +46,9 @@ async function updateOrderStatus(
 }
 
 export const PATCH = withParamsValidation(
-  IdSchema,
-  (params, request) =>
+  (params: { id: string }, request: NextRequest) =>
     withValidation(UpdateOrderStatusSchema, (data, req) =>
       updateOrderStatus(params, data, req)
-    )(request)
+    )(request),
+  IdSchema
 )

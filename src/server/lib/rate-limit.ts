@@ -23,10 +23,10 @@ export class RateLimiter {
       return this.config.keyGenerator(request)
     }
 
-    const ip = request.ip ||
-      request.headers.get('x-forwarded-for')?.split(',')[0] ||
-      request.headers.get('x-real-ip') ||
-      'unknown'
+    // NextRequest doesn't have ip property, so we need to extract from headers
+    const forwardedFor = request.headers.get('x-forwarded-for')
+    const realIp = request.headers.get('x-real-ip')
+    const ip = forwardedFor?.split(',')[0] || realIp || 'unknown'
 
     return `rate_limit:${ip}`
   }

@@ -1,7 +1,7 @@
 import { prisma } from '../../db/prisma'
+import { ApiError } from '../../lib/errors'
 import { logger } from '../../lib/logger'
 import { createOrderEvent } from './event.service'
-import { ApiError } from '../../lib/errors'
 
 export interface CreateOrderRequest {
   sellerId: string
@@ -32,7 +32,7 @@ export interface Order {
   deliveryFeeMinor: number
   totalMinor: number
   currency: string
-  notes?: string
+  notes: string | null
   source: string
   createdAt: Date
   updatedAt: Date
@@ -109,7 +109,7 @@ export class OrderService {
     const orderItems = items.map(item => {
       const product = products.find(p => p.id === item.productId)!
       const lineTotalMinor = product.priceMinor * item.quantity
-      
+
       return {
         productId: item.productId,
         productNameSnapshot: product.name,
@@ -180,10 +180,10 @@ export class OrderService {
       return newOrder
     })
 
-    logger.info('Order created successfully', { 
-      orderId: order.id, 
+    logger.info('Order created successfully', {
+      orderId: order.id,
       publicOrderNumber: order.publicOrderNumber,
-      totalMinor: order.totalMinor 
+      totalMinor: order.totalMinor
     })
 
     return order
@@ -235,10 +235,10 @@ export class OrderService {
       return order
     })
 
-    logger.info('Order transition applied', { 
-      orderId, 
-      from: currentOrder.status, 
-      to: newStatus 
+    logger.info('Order transition applied', {
+      orderId,
+      from: currentOrder.status,
+      to: newStatus
     })
 
     return updatedOrder
@@ -300,8 +300,8 @@ export class OrderService {
         },
       },
       orderBy: { createdAt: 'desc' },
-      limit,
-      offset,
+      take: limit,
+      skip: offset,
     })
   }
 

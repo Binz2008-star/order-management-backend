@@ -11,10 +11,16 @@ export interface RateLimitConfig {
 
 interface RedisClient {
   get(key: string): Promise<string | null>
-  set(key: string, value: string, mode?: string, duration?: number): Promise<string | null>
+  set(key: string, value: string, mode?: 'EX' | 'PX' | 'NX' | 'XX', duration?: number): Promise<string | null>
   incr(key: string): Promise<number>
   expire(key: string, seconds: number): Promise<boolean>
   del(key: string): Promise<number>
+  connect?(): Promise<void>
+  multi?(): {
+    incr(key: string): void
+    expire(key: string, seconds: number): void
+    exec(): Promise<[number, boolean] | null>
+  }
 }
 
 class RedisRateLimiter {
@@ -40,8 +46,10 @@ class RedisRateLimiter {
       // Create Redis client
       if (redisUrl.startsWith('redis://')) {
         // Standard Redis
-        this.redis = redis.createClient({ url: redisUrl })
-        await this.redis.connect()
+        this.redis = redis.createClient({ url: redisUrl }) as unknown as RedisClient
+        if (this.redis.connect) {
+          await this.redis.connect()
+        }
       } else {
         // Upstash Redis REST
         this.redis = redis.createClient({
@@ -49,8 +57,10 @@ class RedisRateLimiter {
           socket: {
             tls: true
           }
-        })
-        await this.redis.connect()
+        }) as unknown as RedisClient
+        if (this.redis.connect) {
+          await this.redis.connect()
+        }
       }
 
       this.isRedisAvailable = true
@@ -66,10 +76,10 @@ class RedisRateLimiter {
       return this.config.keyGenerator(request)
     }
 
-    const ip = request.ip ||
-      request.headers.get('x-forwarded-for')?.split(',')[0] ||
-      request.headers.get('x-real-ip') ||
-      'unknown'
+    // NextRequest doesn't have ip property, so we need to extract from headers
+    const forwardedFor = request.headers.get('x-forwarded-for')
+    const realIp = request.headers.get('x-real-ip')
+    const ip = forwardedFor?.split(',')[0] || realIp || 'unknown'
 
     const prefix = this.config.redisKeyPrefix || 'rate_limit'
     return `${prefix}:${ip}`
@@ -87,6 +97,9 @@ class RedisRateLimiter {
 
     try {
       // Use Redis INCR and EXPIRE for atomic rate limiting
+      if (!this.redis.multi) {
+        throw new Error('Redis multi not supported')
+      }
       const pipeline = this.redis.multi()
       pipeline.incr(redisKey)
       pipeline.expire(redisKey, windowSeconds)
@@ -96,8 +109,8 @@ class RedisRateLimiter {
         throw new Error('Redis pipeline failed')
       }
 
-      const currentCount = (results[0] as [string, number])[1]
-      // const expireResult = (results[1] as [string, number])[1] // Not used currently
+      const currentCount = (results[0] as unknown as [string, number])[1]
+      // const expireResult = (results[1] as unknown as [string, number])[1] // Not used currently
 
       const allowed = currentCount <= this.config.maxRequests
       const remaining = Math.max(0, this.config.maxRequests - currentCount)
@@ -114,7 +127,7 @@ class RedisRateLimiter {
 
       return { allowed, remaining, resetTime }
     } catch (error) {
-      logger.error('Redis rate limiting error, falling back to memory', { error: error instanceof Error ? error.message : 'Unknown error' })
+      logger.error('Redis rate limiting error, falling back to memory', error as Error)
       return this.handleMemoryRateLimit(key)
     }
   }
@@ -162,7 +175,7 @@ class RedisRateLimiter {
         await this.redis.del(key)
         return true
       } catch (error) {
-        logger.error('Failed to reset Redis key', { error: error instanceof Error ? error.message : 'Unknown error' })
+        logger.error('Failed to reset Redis key', error as Error)
         return false
       }
     } else {
@@ -184,7 +197,7 @@ class RedisRateLimiter {
         }
         return null
       } catch (error) {
-        logger.error('Failed to get Redis stats', { error: error instanceof Error ? error.message : 'Unknown error' })
+        logger.error('Failed to get Redis stats', error as Error)
         return null
       }
     } else {
