@@ -45,7 +45,8 @@ async function updateOrderStatus(
   }
 }
 
-const handler = (params: { id: string }, request: NextRequest) =>
+// Handler that matches RouteHandler<{ id: string }>
+const handler = (params: { id: string }, request: NextRequest): Promise<NextResponse> =>
   withValidation(UpdateOrderStatusSchema, (data, req) =>
     updateOrderStatus(params, data, req)
   )(request)
