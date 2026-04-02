@@ -67,20 +67,20 @@ describe('Auth Hardening Tests', () => {
     })
 
     it('should generate valid JWT token', async () => {
-      const { user } = await createSellerUser()
+      const { authUser } = await createSellerUser()
 
-      const token = generateToken(user)
+      const token = generateToken(authUser)
       const decoded = verifyToken(token)
 
-      expect(decoded.id).toBe(user.id)
-      expect(decoded.email).toBe(user.email)
+      expect(decoded.id).toBe(authUser.id)
+      expect(decoded.email).toBe(authUser.email)
       expect(decoded.role).toBe('SELLER')
       expect(decoded.sellerId).toBeDefined()
     })
 
     it('should verify token and return user from request', async () => {
-      const { user } = await createSellerUser()
-      const token = generateToken(user)
+      const { authUser } = await createSellerUser()
+      const token = generateToken(authUser)
 
       const request = new NextRequest('http://localhost:3000', {
         headers: {
@@ -88,11 +88,12 @@ describe('Auth Hardening Tests', () => {
         },
       })
 
-      const authUser = await getCurrentUser(request)
+      const verifiedUser = await getCurrentUser(request)
 
-      expect(authUser?.id).toBe(user.id)
-      expect(authUser?.email).toBe(user.email)
-      expect(authUser?.role).toBe('SELLER')
+      expect(verifiedUser?.id).toBe(authUser.id)
+      expect(verifiedUser?.email).toBe(authUser.email)
+      expect(verifiedUser?.role).toBe('SELLER')
+      expect(verifiedUser?.sellerId).toBe(authUser.sellerId)
     })
   })
 
@@ -158,8 +159,8 @@ describe('Auth Hardening Tests', () => {
 
   describe('Authorization Tests', () => {
     it('should allow seller to access seller-only route', async () => {
-      const { user } = await createSellerUser()
-      const token = generateToken(user)
+      const { authUser } = await createSellerUser()
+      const token = generateToken(authUser)
 
       const request = new NextRequest('http://localhost:3000', {
         headers: {
@@ -175,7 +176,13 @@ describe('Auth Hardening Tests', () => {
 
     it('should reject non-seller user from seller-only route', async () => {
       const staffUser = await createTestUser({ role: 'STAFF' })
-      const token = generateToken(staffUser)
+      const authStaffUser = {
+        id: staffUser.id,
+        email: staffUser.email,
+        role: staffUser.role as 'STAFF' | 'SELLER' | 'ADMIN',
+        sellerId: null,
+      }
+      const token = generateToken(authStaffUser)
 
       const request = new NextRequest('http://localhost:3000', {
         headers: {
@@ -190,7 +197,13 @@ describe('Auth Hardening Tests', () => {
 
     it('should reject seller without seller association', async () => {
       const sellerUser = await createTestUser({ role: 'SELLER' }) // No associated seller record
-      const token = generateToken(sellerUser)
+      const authSellerUser = {
+        id: sellerUser.id,
+        email: sellerUser.email,
+        role: sellerUser.role as 'STAFF' | 'SELLER' | 'ADMIN',
+        sellerId: null,
+      }
+      const token = generateToken(authSellerUser)
 
       const request = new NextRequest('http://localhost:3000', {
         headers: {
@@ -204,8 +217,8 @@ describe('Auth Hardening Tests', () => {
     })
 
     it('should reject wrong seller from accessing another seller\'s data', async () => {
-      const { user: seller1 } = await createSellerUser()
-      const { user: seller2 } = await createSellerUser()
+      const { authUser: seller1 } = await createSellerUser()
+      const { authUser: seller2 } = await createSellerUser()
 
       // Create orders for seller1
       await prisma.order.create({
@@ -244,25 +257,25 @@ describe('Auth Hardening Tests', () => {
 
   describe('Token Edge Cases', () => {
     it('should handle expired tokens', async () => {
-      const { user } = await createSellerUser()
+      const { authUser } = await createSellerUser()
 
       // Create token with very short expiration for testing
-      const token = generateToken(user)
+      const token = generateToken(authUser)
 
       // Mock time passage (in real scenario, token would be expired)
       // For this test, we'll verify the token structure is correct
       const decoded = verifyToken(token)
-      expect(decoded.id).toBe(user.id)
+      expect(decoded.id).toBe(authUser.id)
     })
 
     it('should reject tokens with invalid algorithm', async () => {
-      const { user } = await createSellerUser()
+      const { authUser } = await createSellerUser()
 
       // This would require custom token creation with wrong algorithm
       // For now, we verify our token generation uses correct defaults
-      const token = generateToken(user)
+      const token = generateToken(authUser)
       const decoded = verifyToken(token)
-      expect(decoded.id).toBe(user.id)
+      expect(decoded.id).toBe(authUser.id)
     })
 
     it('should normalize email in authentication', async () => {

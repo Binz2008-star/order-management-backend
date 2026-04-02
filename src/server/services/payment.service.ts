@@ -57,6 +57,7 @@ export class PaymentService {
         where: { id: data.orderId },
         select: {
           id: true,
+          paymentType: true,
           paymentAttempts: {
             where: {
               status: { in: ['PENDING', 'PROCESSING'] }
@@ -67,6 +68,11 @@ export class PaymentService {
       })
 
       if (!order) throw new Error('Order not found')
+
+      // Business rule: Payment attempts not allowed for Cash on Delivery orders
+      if (order.paymentType === 'CASH_ON_DELIVERY') {
+        throw new Error('Payment attempts not allowed for Cash on Delivery orders')
+      }
 
       if (order.paymentAttempts.length > 0) {
         throw new Error('Active payment attempt exists')
