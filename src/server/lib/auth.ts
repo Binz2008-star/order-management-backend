@@ -4,12 +4,7 @@ import { NextRequest } from 'next/server'
 import { prisma } from '../db/prisma'
 import { ApiError } from './errors'
 
-const JWT_SECRET = process.env.JWT_SECRET
 const JWT_EXPIRES_IN: SignOptions['expiresIn'] = '7d'
-
-if (!JWT_SECRET) {
-  throw new Error('JWT_SECRET environment variable is required')
-}
 
 type UserRole = 'STAFF' | 'SELLER' | 'ADMIN'
 
@@ -39,6 +34,16 @@ interface SellerAuthUser extends AuthUser {
 
 interface AdminAuthUser extends AuthUser {
   role: 'ADMIN'
+}
+
+function getJwtSecret(): string {
+  const secret = process.env.JWT_SECRET
+
+  if (!secret || secret.trim() === '') {
+    throw new Error('JWT_SECRET environment variable is required')
+  }
+
+  return secret
 }
 
 function assertNonEmptyString(value: unknown, fieldName: string): asserts value is string {
@@ -79,6 +84,7 @@ export async function verifyPassword(password: string, hash: string): Promise<bo
 }
 
 export function generateToken(user: AuthUser): string {
+  const jwtSecret = getJwtSecret()
   const payload: Omit<TokenPayload, keyof JwtPayload> = {
     id: user.id,
     email: user.email,
@@ -86,14 +92,14 @@ export function generateToken(user: AuthUser): string {
     sellerId: user.sellerId,
   }
 
-  return jwt.sign(payload, JWT_SECRET!, {
+  return jwt.sign(payload, jwtSecret, {
     expiresIn: JWT_EXPIRES_IN,
   })
 }
 
 export function verifyToken(token: string): AuthUser {
   try {
-    const decoded = jwt.verify(token, JWT_SECRET!)
+    const decoded = jwt.verify(token, getJwtSecret())
     const payload = normalizeTokenPayload(decoded)
 
     return {

@@ -7,6 +7,15 @@ interface EnvValidationResult {
   warnings: string[]
 }
 
+function looksLikePlaceholderSecret(value: string): boolean {
+  const normalized = value.trim().toLowerCase()
+
+  return normalized.includes('change-in-production')
+    || normalized.includes('change-me')
+    || normalized.includes('your-')
+    || normalized.includes('replace-with-real')
+}
+
 export function validateProductionEnvironment(): EnvValidationResult {
   const errors: string[] = []
   const warnings: string[] = []
@@ -31,6 +40,8 @@ export function validateProductionEnvironment(): EnvValidationResult {
       errors.push(`Missing required environment variable: ${envVar}`)
     } else if (envVar.includes('SECRET') && process.env[envVar]!.length < 32) {
       errors.push(`${envVar} must be at least 32 characters for security`)
+    } else if (envVar.includes('SECRET') && looksLikePlaceholderSecret(process.env[envVar]!)) {
+      errors.push(`${envVar} cannot use a placeholder value`)
     }
   }
 

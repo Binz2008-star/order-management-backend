@@ -1,8 +1,19 @@
-import { describe, it, expect, beforeEach } from 'vitest'
-import { hashPassword, authenticateUser } from '../server/lib/auth'
+import { describe, it, expect, beforeEach, beforeAll, afterAll } from 'vitest'
+import { hashPassword, authenticateUser, generateToken, getCurrentUser } from '../server/lib/auth'
 import { prisma } from '../tests/setup'
+import { NextRequest } from 'next/server'
 
 describe('Authentication', () => {
+  const originalJwtSecret = process.env.JWT_SECRET
+
+  beforeAll(() => {
+    process.env.JWT_SECRET = originalJwtSecret
+  })
+
+  afterAll(() => {
+    process.env.JWT_SECRET = originalJwtSecret
+  })
+
   beforeEach(async () => {
     await prisma.user.deleteMany()
   })
@@ -88,6 +99,34 @@ describe('Authentication', () => {
 
     it('should reject non-existent user', async () => {
       await expect(authenticateUser('nonexistent@example.com', 'password')).rejects.toThrow('Invalid credentials')
+    })
+
+    it('should reject invalid token', async () => {
+      const request = new NextRequest('http://localhost:3000', {
+        headers: {
+          Authorization: 'Bearer invalid-token',
+        },
+      })
+
+      await expect(getCurrentUser(request)).rejects.toThrow('Invalid token')
+    })
+
+    it('should fail when JWT_SECRET is missing', async () => {
+      const previousJwtSecret = process.env.JWT_SECRET
+      process.env.JWT_SECRET = ''
+
+      try {
+        expect(() =>
+          generateToken({
+            id: 'user-1',
+            email: 'test@example.com',
+            role: 'SELLER',
+            sellerId: 'seller-1',
+          })
+        ).toThrow('JWT_SECRET environment variable is required')
+      } finally {
+        process.env.JWT_SECRET = previousJwtSecret
+      }
     })
   })
 })
