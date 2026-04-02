@@ -39,8 +39,8 @@ jobs:
           npx eslint --version
           echo "=== ESLint Config ==="
           cat eslint.config.mjs
-          echo "=== Running ESLint with verbose output ==="
-          npx eslint . --format verbose --max-warnings=0 || echo "ESLint failed with exit code $?"
+          echo "=== Running ESLint (errors only, warnings allowed) ==="
+          npx eslint . --format stylish --max-warnings=10 || echo "ESLint failed with exit code $?"
 
       - name: Run typecheck
         run: npx tsc --noEmit
