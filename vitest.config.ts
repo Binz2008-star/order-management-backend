@@ -1,9 +1,10 @@
-import { defineConfig } from 'vitest/config'
+/// <reference types="vitest" />
 
-export default defineConfig({
+export default {
   test: {
     globals: true,
     environment: 'node',
     setupFiles: ['./src/tests/setup.ts'],
+    fileParallelism: false, // Run tests sequentially for proper DB isolation
   },
-})
+}

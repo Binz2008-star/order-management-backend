@@ -18,7 +18,7 @@ describe('Order Creation', () => {
     // Create seller
     const user = await prisma.user.create({
       data: {
-        email: 'seller@example.com',
+        email: `seller-${Date.now()}@example.com`,
         fullName: 'Test Seller',
         passwordHash: await (await import('bcryptjs')).hash('password', 12),
         role: 'SELLER',

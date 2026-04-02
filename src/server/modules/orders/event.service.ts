@@ -1,25 +1,26 @@
+import type { Prisma, PrismaClient } from '@prisma/client'
 import { prisma } from '../../db/prisma'
 import { logger } from '../../lib/logger'
 
 export interface CreateOrderEventRequest {
   orderId: string
   eventType: string
-  actorUserId?: string
-  payload?: Record<string, any>
+  actorUserId?: string | null
+  payload?: Record<string, unknown>
 }
 
 export interface OrderEvent {
   id: string
   orderId: string
-  actorUserId?: string
+  actorUserId: string | null
   eventType: string
-  payloadJson?: string
+  payloadJson: string | null
   createdAt: Date
 }
 
 export class EventService {
   async createOrderEvent(
-    tx: any, // Transaction client
+    tx: Prisma.TransactionClient, // Transaction client
     request: CreateOrderEventRequest
   ): Promise<OrderEvent> {
     const { orderId, eventType, actorUserId, payload } = request
@@ -48,7 +49,7 @@ export class EventService {
 
   async getOrderEventsByType(orderId: string, eventType: string): Promise<OrderEvent[]> {
     return prisma.orderEvent.findMany({
-      where: { 
+      where: {
         orderId,
         eventType,
       },
@@ -64,7 +65,7 @@ export class EventService {
   }
 
   async createPaymentEvent(
-    tx: any,
+    tx: Prisma.TransactionClient,
     orderId: string,
     eventType: 'payment_initiated' | 'payment_completed' | 'payment_failed',
     payload: {
@@ -84,7 +85,7 @@ export class EventService {
   }
 
   async createStatusChangeEvent(
-    tx: any,
+    tx: Prisma.TransactionClient,
     orderId: string,
     fromStatus: string,
     toStatus: string,
@@ -105,10 +106,10 @@ export class EventService {
   }
 
   async createSystemEvent(
-    tx: any,
+    tx: PrismaClient,
     orderId: string,
     eventType: string,
-    payload: Record<string, any>
+    payload: Record<string, unknown>
   ): Promise<OrderEvent> {
     return this.createOrderEvent(tx, {
       orderId,

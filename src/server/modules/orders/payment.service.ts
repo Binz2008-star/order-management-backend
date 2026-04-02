@@ -1,7 +1,7 @@
 import { prisma } from '../../db/prisma'
+import { ApiError } from '../../lib/errors'
 import { logger } from '../../lib/logger'
 import { createOrderEvent } from './event.service'
-import { ApiError } from '../../lib/errors'
 
 export interface InitiatePaymentRequest {
   orderId: string
@@ -34,26 +34,26 @@ export interface PaymentAttempt {
   id: string
   orderId: string
   provider: string
-  providerReference?: string
+  providerReference: string | null
   amountMinor: number
   currency: string
   status: string
-  paymentType?: string
-  failureReason?: string
-  metadataJson?: string
-  rawPayloadJson?: string
+  paymentType: string | null
+  failureReason: string | null
+  metadataJson: string | null
+  rawPayloadJson: string | null
   createdAt: Date
   updatedAt: Date
 }
 
-// Payment state machine
-const PAYMENT_STATUS_TRANSITIONS: Record<string, string[]> = {
-  PENDING: ['PROCESSING', 'FAILED'],
-  PROCESSING: ['COMPLETED', 'FAILED'],
-  COMPLETED: ['REFUNDED'],
-  FAILED: ['PENDING'], // Can retry failed payments
-  REFUNDED: [], // Terminal state
-}
+// Payment state machine (for future use)
+// const PAYMENT_STATUS_TRANSITIONS: Record<string, string[]> = {
+//   PENDING: ['PROCESSING', 'FAILED'],
+//   PROCESSING: ['COMPLETED', 'FAILED'],
+//   COMPLETED: ['REFUNDED'],
+//   FAILED: ['PENDING'], // Can retry failed payments
+//   REFUNDED: [], // Terminal state
+// }
 
 export class PaymentService {
   async initiatePayment(request: InitiatePaymentRequest, actorUserId?: string): Promise<PaymentAttempt> {
@@ -120,11 +120,11 @@ export class PaymentService {
       return attempt
     })
 
-    logger.info('Payment initiated', { 
-      attemptId: paymentAttempt.id, 
-      orderId, 
+    logger.info('Payment initiated', {
+      attemptId: paymentAttempt.id,
+      orderId,
       provider,
-      amountMinor: paymentAttempt.amountMinor 
+      amountMinor: paymentAttempt.amountMinor
     })
 
     return paymentAttempt
@@ -221,12 +221,12 @@ export class PaymentService {
       return attempt
     })
 
-    logger.info('Payment confirmed', { 
-      attemptId: confirmedAttempt.id, 
-      orderId, 
+    logger.info('Payment confirmed', {
+      attemptId: confirmedAttempt.id,
+      orderId,
       provider,
       providerReference,
-      amountMinor: confirmedAttempt.amountMinor 
+      amountMinor: confirmedAttempt.amountMinor
     })
 
     return confirmedAttempt
@@ -299,11 +299,11 @@ export class PaymentService {
       return attempt
     })
 
-    logger.warn('Payment failed', { 
-      attemptId: failedAttempt.id, 
-      orderId, 
+    logger.warn('Payment failed', {
+      attemptId: failedAttempt.id,
+      orderId,
       provider,
-      reason 
+      reason
     })
 
     return failedAttempt
@@ -384,11 +384,11 @@ export class PaymentService {
       return attempt
     })
 
-    logger.info('Payment refunded', { 
-      refundAttemptId: refundAttempt.id, 
-      orderId, 
+    logger.info('Payment refunded', {
+      refundAttemptId: refundAttempt.id,
+      orderId,
       provider,
-      amountMinor 
+      amountMinor
     })
 
     return refundAttempt
@@ -412,7 +412,7 @@ export class PaymentService {
     logger.info('Simulating payment', { orderId, success })
 
     // Initiate payment first
-    const initiated = await this.initiatePayment({
+    await this.initiatePayment({
       orderId,
       provider: 'SIMULATOR',
       paymentType: 'SIMULATION',

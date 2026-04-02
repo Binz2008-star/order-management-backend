@@ -1,13 +1,13 @@
-import { Prisma } from '@prisma/client'
+import { Order, OrderItem, Prisma } from '@prisma/client'
 import { prisma } from '../db/prisma'
 import { logger } from '../lib/logger'
+import { createOrderEvent } from '../modules/orders/event.service'
 import {
   OrderStatus,
   OrderTransitionError,
   isTerminalOrderStatus,
   isValidOrderTransition
 } from '../modules/orders/transitions'
-import { OrderEventService } from './order-event.service'
 
 type OrderStatusType = typeof OrderStatus[keyof typeof OrderStatus]
 
@@ -77,20 +77,17 @@ export class OrderService {
           lineTotalMinor
         })
 
-        // Update stock with concurrency guard
+        // Update stock with proper concurrency handling
         const stockUpdate = await tx.product.update({
-          where: {
-            id: item.productId,
-            stockQuantity: { gte: item.quantity } // Guard: only if enough stock
-          },
+          where: { id: item.productId },
           data: {
             stockQuantity: { decrement: item.quantity }
           }
         })
 
-        // If stock update failed (no rows matched), we're out of stock
-        if (!stockUpdate) {
-          throw new Error(`Insufficient stock for product ${item.productId}. Available: ${product.stockQuantity}, Requested: ${item.quantity}`)
+        // Verify stock was sufficient (handles race condition)
+        if (stockUpdate.stockQuantity < 0) {
+          throw new Error(`Insufficient stock for product ${product.name}. Available: ${product.stockQuantity}, Requested: ${item.quantity}`)
         }
       }
 
@@ -125,10 +122,10 @@ export class OrderService {
       })
 
       // Log order creation event using centralized service
-      await OrderEventService.createEvent(tx, {
+      await createOrderEvent(tx, {
         orderId: order.id,
         actorUserId: null, // System created
-        eventType: OrderEventService.EVENT_TYPES.ORDER_CREATED,
+        eventType: 'order_created',
         payload: {
           publicOrderNumber,
           itemCount: orderItems.length,
@@ -168,7 +165,17 @@ export class OrderService {
       throw new OrderTransitionError(currentStatus, newStatus)
     }
     await tx.order.update({ where: { id: orderId }, data: { status: newStatus } })
-    await OrderEventService.createStatusChangeEvent(tx, orderId, actorUserId, currentStatus, newStatus, reason)
+    await createOrderEvent(tx, {
+      orderId,
+      eventType: 'status_changed',
+      actorUserId,
+      payload: {
+        from: currentStatus,
+        to: newStatus,
+        reason,
+        timestamp: new Date().toISOString(),
+      },
+    })
   }
 
   async updateOrderStatus(data: UpdateOrderStatusData) {
@@ -193,8 +200,8 @@ export class OrderService {
       }
 
       // Validate transition
-      if (!isValidOrderTransition(currentOrder.status, newStatus)) {
-        throw new OrderTransitionError(currentOrder.status, newStatus)
+      if (!isValidOrderTransition(currentOrder.status as OrderStatus, newStatus)) {
+        throw new OrderTransitionError(currentOrder.status as OrderStatus, newStatus)
       }
 
       // Business logic for specific transitions
@@ -211,17 +218,23 @@ export class OrderService {
       })
 
       // Log status change event using centralized service
-      await OrderEventService.createStatusChangeEvent(
+      await createOrderEvent(
         tx,
-        orderId,
-        actorUserId,
-        currentOrder.status,
-        newStatus,
-        reason
+        {
+          orderId,
+          eventType: 'status_changed',
+          actorUserId,
+          payload: {
+            from: currentOrder.status,
+            to: newStatus,
+            reason: data.reason,
+            timestamp: new Date().toISOString(),
+          },
+        }
       )
 
       // Handle post-transition actions
-      await this.handlePostTransitionActions(tx, updatedOrder, currentOrder.status, newStatus)
+      await this.handlePostTransitionActions(tx, updatedOrder, currentOrder.status as OrderStatus, newStatus)
 
       logger.info('Order status updated successfully', {
         orderId,
@@ -265,11 +278,11 @@ export class OrderService {
     tx: Prisma.TransactionClient,
     order: Order & { orderItems: OrderItem[] },
     newStatus: OrderStatus,
-    reason?: string
+    _reason?: string
   ) {
     // CANCELLATION rules
     if (newStatus === OrderStatus.CANCELLED) {
-      if (isTerminalOrderStatus(order.status)) {
+      if (isTerminalOrderStatus(order.status as OrderStatus)) {
         throw new Error('Cannot cancel order in terminal state')
       }
 
@@ -285,11 +298,16 @@ export class OrderService {
         })
 
         // Log stock release event
-        await OrderEventService.createStockEvent(tx, order.id, null, OrderEventService.EVENT_TYPES.STOCK_RELEASED, {
-          productId: item.productId,
-          productName: item.productNameSnapshot,
-          quantity: item.quantity,
-          reason: 'Order cancellation',
+        await createOrderEvent(tx, {
+          orderId: order.id,
+          eventType: 'stock_released',
+          actorUserId: null,
+          payload: {
+            productId: item.productId,
+            productName: item.productNameSnapshot,
+            quantity: item.quantity,
+            reason: 'order_cancelled',
+          },
         })
       }
     }
@@ -327,10 +345,15 @@ export class OrderService {
       })
 
       // Log payment completion event
-      await OrderEventService.createPaymentEvent(tx, order.id, null, OrderEventService.EVENT_TYPES.PAYMENT_CONFIRMED, {
-        provider: 'CASH_ON_DELIVERY',
-        amountMinor: order.totalMinor,
-        currency: order.currency,
+      await createOrderEvent(tx, {
+        orderId: order.id,
+        eventType: 'payment_completed',
+        actorUserId: null,
+        payload: {
+          provider: 'CASH_ON_DELIVERY',
+          amountMinor: order.totalMinor,
+          currency: order.currency,
+        },
       })
     }
   }
