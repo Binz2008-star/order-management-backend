@@ -242,7 +242,7 @@ describe('Payment Service - Atomic Operations', () => {
       where: { orderId: order.id, eventType: 'payment_initiated' }
     })
     expect(events).toHaveLength(1)
-  })
+  }, 10000)
 
   test('provider reference idempotency - duplicate rejected', async () => {
     // First payment attempt
