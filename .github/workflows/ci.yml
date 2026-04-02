@@ -36,8 +36,23 @@ jobs:
       - name: Run typecheck
         run: npx tsc --noEmit
 
+      - name: Debug Prisma
+        run: |
+          echo "=== Prisma Status ==="
+          npx prisma db pull
+        env:
+          DATABASE_URL: file:./test.db
+
       - name: Run tests
-        run: npx vitest run --reporter=verbose
+        run: |
+          echo "=== ENV ==="
+          env | sort
+
+          echo "=== DB FILE ==="
+          ls -la
+
+          echo "=== Running Vitest ==="
+          npx vitest run --reporter=verbose --run
         env:
           DATABASE_URL: file:./test.db
           NODE_ENV: test
