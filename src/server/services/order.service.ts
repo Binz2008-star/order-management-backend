@@ -77,13 +77,21 @@ export class OrderService {
           lineTotalMinor
         })
 
-        // Update stock
-        await tx.product.update({
-          where: { id: item.productId },
+        // Update stock with concurrency guard
+        const stockUpdate = await tx.product.update({
+          where: {
+            id: item.productId,
+            stockQuantity: { gte: item.quantity } // Guard: only if enough stock
+          },
           data: {
-            stockQuantity: product.stockQuantity - item.quantity
+            stockQuantity: { decrement: item.quantity }
           }
         })
+
+        // If stock update failed (no rows matched), we're out of stock
+        if (!stockUpdate) {
+          throw new Error(`Insufficient stock for product ${item.productId}. Available: ${product.stockQuantity}, Requested: ${item.quantity}`)
+        }
       }
 
       // Create order
@@ -246,7 +254,11 @@ export class OrderService {
     })
 
     const sequence = (orderCount + 1).toString().padStart(3, '0')
-    return `${prefix}-${date}-${sequence}`
+    const orderNumber = `${prefix}-${date}-${sequence}`
+
+    // Add timestamp to ensure uniqueness under concurrency
+    const timestamp = Date.now().toString(36)
+    return `${orderNumber}-${timestamp}`
   }
 
   private async validateTransitionRules(

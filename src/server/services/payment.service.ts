@@ -241,6 +241,35 @@ export class PaymentService {
         data: { paymentStatus: 'REFUNDED' }
       })
 
+      // Restock items on full refund
+      if (data.refundAmountMinor === paymentAttempt.amountMinor) {
+        const order = await tx.order.findUnique({
+          where: { id: paymentAttempt.orderId },
+          include: { orderItems: true }
+        })
+
+        if (order) {
+          for (const item of order.orderItems) {
+            await tx.product.update({
+              where: { id: item.productId },
+              data: {
+                stockQuantity: {
+                  increment: item.quantity
+                }
+              }
+            })
+
+            // Log stock release event
+            await OrderEventService.createStockEvent(tx, order.id, actorUserId || null, OrderEventService.EVENT_TYPES.STOCK_RELEASED, {
+              productId: item.productId,
+              productName: item.productNameSnapshot,
+              quantity: item.quantity,
+              reason: 'Payment refund',
+            })
+          }
+        }
+      }
+
       // Log refund event
       await OrderEventService.createPaymentEvent(tx, paymentAttempt.orderId, actorUserId || null, OrderEventService.EVENT_TYPES.PAYMENT_REFUNDED, {
         provider: paymentAttempt.provider,
