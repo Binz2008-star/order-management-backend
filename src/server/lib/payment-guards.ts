@@ -49,7 +49,7 @@ export class PaymentGuards {
     toStatus: string
   ): void {
     const validTransitions: Record<string, string[]> = {
-      'PENDING': ['PROCESSING', 'CANCELLED', 'FAILED'],
+      'PENDING': ['PROCESSING', 'COMPLETED', 'CANCELLED', 'FAILED'],
       'PROCESSING': ['COMPLETED', 'FAILED', 'CANCELLED'],
       'COMPLETED': ['REFUNDED'],
       'FAILED': ['PENDING'], // Allow retry

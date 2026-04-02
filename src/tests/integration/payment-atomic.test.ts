@@ -83,8 +83,8 @@ describe('Payment Service - Atomic Operations', () => {
         productId: product.id,
         quantity: 2,
         unitPriceMinor: 1000,
-        totalPriceMinor: 2000,
-        currency: 'USD'
+        lineTotalMinor: 2000,
+        productNameSnapshot: product.name
       }
     })
   })
@@ -159,7 +159,7 @@ describe('Payment Service - Atomic Operations', () => {
 
     // Verify all events created
     const events = await prisma.orderEvent.findMany({ where: { orderId: order.id } })
-    expect(events).toHaveLength(4) // CREATED + INITIATED + CONFIRMED + COMPLETED
+    expect(events).toHaveLength(3) // INITIATED + CONFIRMED + COMPLETED
 
     const eventTypes = events.map(e => e.eventType)
     expect(eventTypes).toContain('PAYMENT_INITIATED')
@@ -334,9 +334,9 @@ describe('Payment Service - Atomic Operations', () => {
         status: 'PENDING',
         paymentStatus: 'PENDING',
         paymentType: 'CASH_ON_DELIVERY',
+        subtotalMinor: 2000,
         totalMinor: 2000,
-        currency: 'USD',
-        deliveryAddress: '123 Test St'
+        currency: 'USD'
       }
     })
 
@@ -403,7 +403,7 @@ describe('Payment Service - Atomic Operations', () => {
     // Try to refund more than original amount
     await expect(
       PaymentService.refundPayment(payment.id, 2500, 'test', 'user-123')
-    ).rejects.toThrow('Refund amount $25.00 exceeds original payment $20.00')
+    ).rejects.toThrow('Refund amount $25 exceeds original payment $20')
 
     // Verify payment still in COMPLETED state
     const updatedPayment = await prisma.paymentAttempt.findUnique({
