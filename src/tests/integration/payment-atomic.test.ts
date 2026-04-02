@@ -71,9 +71,9 @@ describe('Payment Service - Atomic Operations', () => {
         status: 'PENDING',
         paymentStatus: 'PENDING',
         paymentType: 'PREPAID',
+        subtotalMinor: 2000,
         totalMinor: 2000,
-        currency: 'USD',
-        deliveryAddress: '123 Test St'
+        currency: 'USD'
       }
     })
 
@@ -82,7 +82,8 @@ describe('Payment Service - Atomic Operations', () => {
         orderId: order.id,
         productId: product.id,
         quantity: 2,
-        priceMinor: 1000,
+        unitPriceMinor: 1000,
+        totalPriceMinor: 2000,
         currency: 'USD'
       }
     })
