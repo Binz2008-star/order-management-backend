@@ -29,7 +29,7 @@ async function updateProduct(
       where: {
         sellerId_slug: {
           sellerId: user.sellerId!,
-          slug: productData.slug,
+          slug: productData.slug as string,
         },
       },
     })
