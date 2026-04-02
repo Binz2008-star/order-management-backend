@@ -53,17 +53,12 @@ export class PaymentService {
     actorUserId?: string
   ) {
     return prisma.$transaction(async (tx) => {
+      // First, lock the order row to prevent concurrent attempts
       const order = await tx.order.findUnique({
         where: { id: data.orderId },
         select: {
           id: true,
           paymentType: true,
-          paymentAttempts: {
-            where: {
-              status: { in: ['PENDING', 'PROCESSING'] }
-            },
-            select: { id: true }
-          }
         }
       })
 
@@ -74,10 +69,19 @@ export class PaymentService {
         throw new Error('Payment attempts not allowed for Cash on Delivery orders')
       }
 
-      if (order.paymentAttempts.length > 0) {
+      // Check for existing payment attempts atomically
+      const existingAttempt = await tx.paymentAttempt.findFirst({
+        where: {
+          orderId: data.orderId,
+          status: { in: ['PENDING', 'PROCESSING'] }
+        }
+      })
+
+      if (existingAttempt) {
         throw new Error('Active payment attempt exists')
       }
 
+      // Create the payment attempt
       const paymentAttempt = await tx.paymentAttempt.create({
         data: {
           orderId: data.orderId,
@@ -348,20 +352,6 @@ export class PaymentService {
     rawPayload?: Record<string, unknown>
   }) {
     return prisma.$transaction(async (tx) => {
-      // Get payment attempt with order details
-      const attempt = await tx.paymentAttempt.findUnique({
-        where: { id: data.paymentAttemptId },
-        include: {
-          order: {
-            select: {
-              id: true,
-              status: true,
-              paymentStatus: true,
-            }
-          }
-        }
-      })
-
       // Atomic update with race condition protection
       const updateResult = await tx.paymentAttempt.updateMany({
         where: {

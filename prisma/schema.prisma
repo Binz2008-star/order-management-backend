@@ -240,6 +240,7 @@ model PaymentAttempt {
   order Order @relation(fields: [orderId], references: [id], onDelete: Cascade)
 
   @@unique([provider, providerReference])
+  @@unique([orderId, status]) // Only one active payment attempt per order
   @@index([orderId]) // For order payment lookup
   @@index([status]) // For payment status filtering
   @@index([provider, status]) // For provider-specific filtering
