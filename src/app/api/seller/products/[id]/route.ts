@@ -100,13 +100,14 @@ async function deleteProduct({ id }: { id: string }, request: NextRequest) {
 }
 
 export const PATCH = withParamsValidation(
-  IdSchema,
   (params, request) =>
     withValidation(UpdateProductSchema, (data, req) =>
       updateProduct(params, data, req)
-    )(request)
+    )(request),
+  IdSchema
 )
 
-export const DELETE = withParamsValidation(IdSchema, (data, request) =>
-  deleteProduct(data, request)
+export const DELETE = withParamsValidation((data, request) =>
+  deleteProduct(data, request),
+  IdSchema
 )
