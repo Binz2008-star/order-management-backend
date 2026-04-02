@@ -39,7 +39,7 @@ class RedisRateLimiter {
 
       const redisUrl = this.config.redisUrl || process.env.REDIS_URL || process.env.UPSTASH_REDIS_REST_URL
       if (!redisUrl) {
-        throw new Error('Redis URL is required for production rate limiting. Configure REDIS_URL or UPSTASH_REDIS_REST_URL environment variable.')
+        throw new Error('Redis URL is not configured')
       }
 
       // Create Redis client
@@ -65,10 +65,12 @@ class RedisRateLimiter {
       this.isRedisAvailable = true
       logger.info('Redis rate limiter initialized successfully')
     } catch (error) {
+      const errorMessage = error instanceof Error ? error.message : 'Unknown error'
       if (process.env.NODE_ENV === 'production') {
-        throw new Error(`Redis rate limiting is required in production. Error: ${error instanceof Error ? error.message : 'Unknown error'}`)
+        logger.warn('Redis initialization failed in production, using memory fallback. Consider configuring REDIS_URL or UPSTASH_REDIS_REST_URL for optimal performance.', { error: errorMessage })
+      } else {
+        logger.warn('Redis initialization failed, using memory fallback in development', { error: errorMessage })
       }
-      logger.warn('Redis initialization failed, using memory fallback in development', { error: error instanceof Error ? error.message : 'Unknown error' })
       this.isRedisAvailable = false
     }
   }
@@ -164,13 +166,17 @@ class RedisRateLimiter {
   async isAllowed(_request: NextRequest): Promise<{ allowed: boolean; remaining: number; resetTime: number }> {
     const key = this.getKey(_request)
 
-    if (process.env.NODE_ENV === 'production' && !this.isRedisAvailable) {
-      throw new Error('Redis rate limiting is required in production but not available')
-    }
-
     if (this.isRedisAvailable && this.redis) {
-      return this.handleRedisRateLimit(key)
+      try {
+        return this.handleRedisRateLimit(key)
+      } catch (error) {
+        logger.warn('Redis rate limiting failed, falling back to memory', { error: error instanceof Error ? error.message : 'Unknown error' })
+        return this.handleMemoryRateLimit(key)
+      }
     } else {
+      if (process.env.NODE_ENV === 'production') {
+        logger.warn('Using memory fallback for rate limiting in production - Redis not available. Consider configuring REDIS_URL or UPSTASH_REDIS_REST_URL for optimal performance.')
+      }
       return this.handleMemoryRateLimit(key)
     }
   }
