@@ -65,7 +65,10 @@ class RedisRateLimiter {
       this.isRedisAvailable = true
       logger.info('Redis rate limiter initialized successfully')
     } catch (error) {
-      logger.warn('Redis initialization failed, using memory fallback', { error: error instanceof Error ? error.message : 'Unknown error' })
+      if (process.env.NODE_ENV === 'production') {
+        throw new Error(`Redis rate limiting is required in production. Error: ${error instanceof Error ? error.message : 'Unknown error'}`)
+      }
+      logger.warn('Redis initialization failed, using memory fallback in development', { error: error instanceof Error ? error.message : 'Unknown error' })
       this.isRedisAvailable = false
     }
   }
@@ -158,8 +161,12 @@ class RedisRateLimiter {
     return { allowed, remaining, resetTime: record.resetTime }
   }
 
-  async isAllowed(request: NextRequest): Promise<{ allowed: boolean; remaining: number; resetTime: number }> {
-    const key = this.getKey(request)
+  async isAllowed(_request: NextRequest): Promise<{ allowed: boolean; remaining: number; resetTime: number }> {
+    const key = this.getKey(_request)
+
+    if (process.env.NODE_ENV === 'production' && !this.isRedisAvailable) {
+      throw new Error('Redis rate limiting is required in production but not available')
+    }
 
     if (this.isRedisAvailable && this.redis) {
       return this.handleRedisRateLimit(key)
