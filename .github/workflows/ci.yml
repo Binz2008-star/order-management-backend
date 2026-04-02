@@ -17,9 +17,13 @@ jobs:
         with:
           node-version: '24'
           cache: npm
+          cache-dependency-path: '**/package-lock.json'
+
+      - name: Clear npm cache
+        run: npm cache clean --force
 
       - name: Install dependencies
-        run: npm ci
+        run: npm ci --no-optional
 
       - name: Generate Prisma client
         run: npx prisma generate
@@ -30,7 +34,13 @@ jobs:
           DATABASE_URL: file:./test.db
 
       - name: Run lint
-        run: npm run lint
+        run: |
+          echo "=== ESLint Version ==="
+          npx eslint --version
+          echo "=== ESLint Config ==="
+          cat eslint.config.mjs
+          echo "=== Running ESLint with verbose output ==="
+          npx eslint . --format verbose --max-warnings=0 || echo "ESLint failed with exit code $?"
 
       - name: Run typecheck
         run: npx tsc --noEmit

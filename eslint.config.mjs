@@ -15,6 +15,12 @@ const eslintConfig = defineConfig([
       "*.config.js",
       "*.config.ts"
     ]
+  },
+  {
+    rules: {
+      '@typescript-eslint/no-explicit-any': 'error',
+      '@typescript-eslint/no-unused-vars': 'warn'
+    }
   }
 ]);
 
