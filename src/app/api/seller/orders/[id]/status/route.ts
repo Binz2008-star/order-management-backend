@@ -49,7 +49,7 @@ export async function PATCH(
   } catch (error: unknown) {
     if (error instanceof OrderTransitionError) {
       return NextResponse.json(
-        { error: (error as OrderTransitionError).message },
+        { error: error.message },
         { status: 400 }
       )
     }
