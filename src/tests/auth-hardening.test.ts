@@ -18,7 +18,7 @@ describe('Auth Hardening Tests', () => {
     passwordHash: string
   }> = {}) {
     const defaultUser = {
-      email: 'test@example.com',
+      email: `test-${Date.now()}-${Math.random()}@example.com`,
       fullName: 'Test User',
       role: 'SELLER' as const,
       isActive: true,
@@ -296,19 +296,20 @@ describe('Auth Hardening Tests', () => {
     })
 
     it('should normalize email in authentication', async () => {
-      await createTestUser({ email: 'test@example.com' })
+      const testEmail = `test-${Date.now()}-${Math.random()}@example.com`
+      await createTestUser({ email: testEmail })
 
       // Test case-insensitive authentication (service normalizes emails)
-      const result = await authenticateUser('TEST@EXAMPLE.COM', 'password123')
-      expect(result.user.email).toBe('test@example.com')
+      const result = await authenticateUser(testEmail.toUpperCase(), 'password123')
+      expect(result.user.email).toBe(testEmail)
     })
 
     it('should trim whitespace in email authentication', async () => {
-      await createTestUser({ email: 'test@example.com' })
+      const testEmail = `test-${Date.now()}-${Math.random()}@example.com`
+      await createTestUser({ email: testEmail })
 
-      const result = await authenticateUser('  test@example.com  ', 'password123')
-
-      expect(result.user.email).toBe('test@example.com')
+      const result = await authenticateUser(`  ${testEmail}  `, 'password123')
+      expect(result.user.email).toBe(testEmail)
     })
   })
 

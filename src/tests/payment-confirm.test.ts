@@ -16,7 +16,7 @@ describe('PaymentService.confirmPayment', () => {
     // Create test user and seller
     const user = await prisma.user.create({
       data: {
-        email: 'test@example.com',
+        email: `test-${Date.now()}-${Math.random()}@example.com`,
         fullName: 'Test User',
         role: 'SELLER',
         isActive: true,

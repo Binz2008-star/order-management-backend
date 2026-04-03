@@ -50,6 +50,7 @@ afterAll(async () => {
 })
 
 beforeEach(async () => {
+  // Clean up in order of dependencies to avoid foreign key constraints
   await prisma.orderEvent.deleteMany()
   await prisma.paymentAttempt.deleteMany()
   await prisma.orderItem.deleteMany()
@@ -58,9 +59,11 @@ beforeEach(async () => {
   await prisma.product.deleteMany()
   await prisma.seller.deleteMany()
   await prisma.user.deleteMany()
+
+  // Add a small delay to ensure cleanup is complete
+  await new Promise(resolve => setTimeout(resolve, 10))
 })
 
-  ; (global as typeof global & { prisma: typeof prisma }).prisma = prisma
+; (global as typeof global & { prisma: typeof prisma }).prisma = prisma
 
 export { prisma }
-

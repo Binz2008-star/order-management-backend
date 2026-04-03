@@ -22,7 +22,7 @@ describe('Authentication', () => {
     it('should hash a password', async () => {
       const password = 'test123'
       const hashedPassword = await hashPassword(password)
-      
+
       expect(hashedPassword).toBeDefined()
       expect(hashedPassword).not.toBe(password)
       expect(hashedPassword.length).toBeGreaterThan(50)
@@ -32,17 +32,17 @@ describe('Authentication', () => {
       const password = 'test123'
       const hash1 = await hashPassword(password)
       const hash2 = await hashPassword(password)
-      
+
       expect(hash1).not.toBe(hash2)
     })
   })
 
   describe('authenticateUser', () => {
     it('should authenticate with correct credentials', async () => {
-      const email = 'test@example.com'
+      const email = `test-${Date.now()}-${Math.random()}@example.com`
       const password = 'test123'
       const hashedPassword = await hashPassword(password)
-      
+
       await prisma.user.create({
         data: {
           email,
@@ -54,7 +54,7 @@ describe('Authentication', () => {
       })
 
       const result = await authenticateUser(email, password)
-      
+
       expect(result).toBeDefined()
       expect(result.user.email).toBe(email)
       expect(result.user.role).toBe('SELLER')
@@ -62,10 +62,10 @@ describe('Authentication', () => {
     })
 
     it('should reject with wrong password', async () => {
-      const email = 'test@example.com'
+      const email = `test-${Date.now()}-${Math.random()}@example.com`
       const password = 'test123'
       const hashedPassword = await hashPassword(password)
-      
+
       await prisma.user.create({
         data: {
           email,
@@ -80,10 +80,10 @@ describe('Authentication', () => {
     })
 
     it('should reject inactive user', async () => {
-      const email = 'test@example.com'
+      const email = `test-${Date.now()}-${Math.random()}@example.com`
       const password = 'test123'
       const hashedPassword = await hashPassword(password)
-      
+
       await prisma.user.create({
         data: {
           email,
@@ -119,7 +119,7 @@ describe('Authentication', () => {
         expect(() =>
           generateToken({
             id: 'user-1',
-            email: 'test@example.com',
+            email: `test-${Date.now()}-${Math.random()}@example.com`,
             role: 'SELLER',
             sellerId: 'seller-1',
           })
