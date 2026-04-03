@@ -58,8 +58,8 @@ describe('Atomicity Stress Test', () => {
 
     console.log(`Concurrent requests: 20, Allowed: ${allowedCount}, Total fetch calls: ${requestCount}`)
 
-    // This test will likely show over-allowance due to race conditions
-    expect(allowedCount).toBeGreaterThan(5) // Will fail if race conditions exist
+    // Memory store is atomic - should not exceed limit
+    expect(allowedCount).toBeLessThanOrEqual(5) // Memory store prevents race conditions
 
     // Restore fetch
     global.fetch = originalFetch

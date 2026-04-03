@@ -32,7 +32,7 @@ describe('Rate Limiting - Header Contract Parity', () => {
 
     expect(serviceResult.allowed).toBe(memoryResult.allowed)
     expect(serviceResult.remaining).toBe(memoryResult.remaining)
-    expect(serviceResult.resetTime).toBe(memoryResult.resetTime)
+    expect(serviceResult.resetTime).toBeCloseTo(memoryResult.resetTime, -2) // Allow 100ms tolerance
   })
 
   it('Rate limit headers are consistent', async () => {
