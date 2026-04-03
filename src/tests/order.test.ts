@@ -1,5 +1,6 @@
 import { beforeEach, describe, expect, it } from 'vitest'
 import { generatePublicOrderNumber } from '../server/lib/utils'
+import { createOrderEvent } from '../server/modules/orders/event.service'
 import { prisma } from './setup'
 
 describe('Order Creation', () => {
@@ -87,12 +88,10 @@ describe('Order Creation', () => {
     })
 
     // Create order event
-    const orderEvent = await prisma.orderEvent.create({
-      data: {
-        orderId: order.id,
-        eventType: 'order_created',
-        payloadJson: JSON.stringify({ source: 'test' }),
-      },
+    const orderEvent = await createOrderEvent(prisma, {
+      orderId: order.id,
+      eventType: 'order_created',
+      payload: { source: 'test' },
     })
 
     expect(order.id).toBeDefined()

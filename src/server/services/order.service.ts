@@ -2,6 +2,7 @@ import { Order, OrderItem, Prisma } from '@prisma/client'
 import { prisma } from '../db/prisma'
 import { logger } from '../lib/logger'
 import { createOrderEvent } from '../modules/orders/event.service'
+import { applyOrderTransitionInTx } from './order-transition.service'
 import {
   OrderStatus,
   OrderTransitionError,
@@ -164,17 +165,13 @@ export class OrderService {
     if (!isValidOrderTransition(currentStatus, newStatus)) {
       throw new OrderTransitionError(currentStatus, newStatus)
     }
-    await tx.order.update({ where: { id: orderId }, data: { status: newStatus } })
-    await createOrderEvent(tx, {
+
+    await applyOrderTransitionInTx(tx, {
       orderId,
-      eventType: 'status_changed',
+      fromStatus: currentStatus,
+      toStatus: newStatus,
       actorUserId,
-      payload: {
-        from: currentStatus,
-        to: newStatus,
-        reason,
-        timestamp: new Date().toISOString(),
-      },
+      reason
     })
   }
 
@@ -207,31 +204,21 @@ export class OrderService {
       // Business logic for specific transitions
       await this.validateTransitionRules(tx, currentOrder, newStatus, reason)
 
-      // Update order status
-      const updatedOrder = await tx.order.update({
+      await applyOrderTransitionInTx(tx, {
+        orderId,
+        fromStatus: currentOrder.status,
+        toStatus: newStatus,
+        actorUserId,
+        reason,
+      })
+
+      const updatedOrder = await tx.order.findUniqueOrThrow({
         where: { id: orderId },
-        data: { status: newStatus },
         include: {
           customer: true,
           orderItems: true
         }
       })
-
-      // Log status change event using centralized service
-      await createOrderEvent(
-        tx,
-        {
-          orderId,
-          eventType: 'status_changed',
-          actorUserId,
-          payload: {
-            from: currentOrder.status,
-            to: newStatus,
-            reason: data.reason,
-            timestamp: new Date().toISOString(),
-          },
-        }
-      )
 
       // Handle post-transition actions
       await this.handlePostTransitionActions(tx, updatedOrder, currentOrder.status as OrderStatus, newStatus)

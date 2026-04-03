@@ -3,6 +3,7 @@ import bcrypt from 'bcryptjs'
 import { nanoid } from 'nanoid'
 import { NextRequest, NextResponse } from 'next/server'
 import { OrderService } from '@/server/services/order.service'
+import { createOrderEvent } from '@/server/modules/orders/event.service'
 
 // Inline implementations to avoid import issues
 function _generatePublicOrderNumber(): string {
@@ -203,18 +204,16 @@ export async function POST(request: NextRequest) {
         data: orderItemsWithOrderId
       })
 
-      // Create order event using service layer pattern
-      await tx.orderEvent.create({
-        data: {
-          orderId: newOrder.id,
-          eventType: 'order_created',
-          actorUserId: adminUser.id,
-          payloadJson: JSON.stringify({
-            source: 'seller_api',
-            itemCount: validatedItems.length,
-            totalMinor: totals.totalMinor
-          })
-        }
+      // Create order event using centralized event authority
+      await createOrderEvent(tx, {
+        orderId: newOrder.id,
+        eventType: 'order_created',
+        actorUserId: adminUser.id,
+        payload: {
+          source: 'seller_api',
+          itemCount: validatedItems.length,
+          totalMinor: totals.totalMinor,
+        },
       })
 
       return newOrder
