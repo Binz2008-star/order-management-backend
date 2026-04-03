@@ -1,14 +1,36 @@
 # Order Management Backend
 
-A production-grade order management system with service-oriented architecture, event sourcing, and comprehensive testing.
+Order management backend under production hardening.
 
-## 🏗️ Architecture
+## Current Status
 
-- **Service Layer**: Clean separation with `OrderService`, `PaymentService`, `EventService`
-- **Event Sourcing**: Every action creates audit events
-- **Authentication**: Real password hashing with bcrypt
-- **Rate Limiting**: Redis-backed with memory fallback
-- **Testing**: Vitest with unit and integration tests
+### Operational Runtime
+
+- **Database**: PostgreSQL on Neon is deployed and reachable in production
+- **Deployment**: Vercel production runtime is operational
+- **Authentication**: bcrypt-backed login and JWT issuance are wired and working
+- **Health Checks**: `/api/health` performs a real database connectivity check
+
+### Hardening In Progress
+
+- **Authoritative Transitions**: Order status changes are being centralized behind a single transition authority
+- **Transactional Audit Events**: Core order and payment flows write audit events through shared services
+- **Rate Limiting**: Store abstraction is in place with policy-based fallback; distributed backing is still being hardened
+- **Remaining Work**: Wider runtime verification, observability, and tighter release gates
+
+### Scope Note
+
+This repository is operational in production, but it is still in an active hardening phase. Avoid treating it as a finished reference architecture.
+
+## Architecture
+
+- **Service Layer**: Core order and payment behavior lives in server-side services
+- **Authoritative Transitions**: Order status writes are being consolidated behind a transition service
+- **Transactional Audit Events**: Important order and payment actions create audit events in the same transaction path
+- **Authentication**: Password hashing and verification use bcrypt
+- **Rate Limiting**: Policy-based limiter with pluggable store support
+- **Database**: PostgreSQL with Neon connection pooling in production
+- **Testing**: Vitest-based test suite with focused critical and full-suite paths
 
 ## 🚀 Quick Start
 
@@ -17,14 +39,18 @@ A production-grade order management system with service-oriented architecture, e
 npm install
 
 # Setup database
+npm run db:generate
+npm run db:migrate
 npm run db:seed
 
 # Start development server
 npm run dev
 
-# Run tests
-npm run test:unit
-npm run test:integration
+# Run the critical test gate
+npm run test:critical
+
+# Run the full suite
+npm run test
 ```
 
 ## 📋 Available Scripts
@@ -94,14 +120,24 @@ await paymentService.initiatePayment({ orderId, provider });
 await paymentService.confirmPayment({ orderId, provider, providerReference });
 ```
 
-### Event Service
+### Authoritative Transition Service
 
 ```typescript
-import { eventService } from "./server/modules/orders/event.service";
+import { applyOrderTransitionInTx } from "./server/modules/orders/order-transition.service";
 
-// Query audit trail
-const events = await eventService.getOrderEvents(orderId);
+// ONLY way to change order status - enforced by architecture
+await prisma.$transaction(async (tx) => {
+  await applyOrderTransitionInTx(tx, {
+    orderId,
+    fromStatus: "PENDING",
+    toStatus: "CONFIRMED",
+    actorUserId,
+    reason: "Payment completed",
+  });
+});
 ```
+
+Architecture rule: `applyOrderTransitionInTx(...)` is the authoritative path for order status changes. Compatibility wrappers still exist for legacy tests while the remaining hardening sweep is completed.
 
 ## 🔐 Authentication
 
@@ -197,36 +233,57 @@ PENDING → PROCESSING → COMPLETED → REFUNDED
 ## 🌍 Environment Variables
 
 ```env
-# Database
-DATABASE_URL="file:./dev.db"
+# Database (PostgreSQL - Neon)
+DATABASE_URL="postgresql://user:pass@host:5432/db?pgbouncer=true"
 
 # Authentication
 JWT_SECRET="your-jwt-secret"
+NEXTAUTH_SECRET="your-nextauth-secret"
+NEXTAUTH_URL="https://your-domain.vercel.app"
+
+# Admin Seed Security
+ADMIN_SEED_TOKEN="your-secure-seed-token"
 
 # Rate Limiting (Optional)
 REDIS_URL="redis://localhost:6379"
+UPSTASH_REDIS_REST_URL="https://your-upstash-url"
+UPSTASH_REDIS_REST_TOKEN="your-upstash-token"
 ```
 
-## 📦 Production Deployment
+## Production Deployment
 
-1. Build the application:
+### Deployment Status: Operational
+
+Currently deployed to Vercel with:
+
+- ✅ PostgreSQL database (Neon) with connection pooling
+- ✅ Real authentication
+- ✅ Production migrations applied
+- ✅ Enhanced security (ADMIN_SEED_TOKEN)
+- ✅ Health checks passing
+- ⚠️ In-memory rate limit fallback still active until Redis/Upstash is configured
+
+### Deployment Steps:
+
+1. **Build the application:**
 
 ```bash
 npm run build
 ```
 
-2. Set production environment variables
+2. **Set production environment variables** on Vercel
 
-3. Run database migrations:
+3. **Run database migrations** (automatic on deploy):
 
 ```bash
 npm run db:deploy
 ```
 
-4. Start the server:
+4. **Seed production data** (optional, secure):
 
 ```bash
-npm run start
+curl -X POST https://your-app.vercel.app/api/admin/seed \
+  -H "Authorization: Bearer $ADMIN_SEED_TOKEN"
 ```
 
 ## 🧹 Development Cleanup

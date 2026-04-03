@@ -1,6 +1,7 @@
 import { PrismaClient } from '@prisma/client'
 import bcrypt from 'bcryptjs'
 import { calculateOrderTotal, generatePublicOrderNumber } from '../src/server/lib/utils'
+import { createOrderEvent } from '../src/server/services/order-event.service'
 
 const prisma = new PrismaClient()
 
@@ -116,14 +117,13 @@ async function main() {
   })
 
   // 7. REQUIRED: Order event
-  await prisma.orderEvent.create({
-    data: {
-      orderId: order.id,
-      eventType: 'ORDER_CREATED',
-      payloadJson: JSON.stringify({
-        source: 'WEBSITE',
-        itemCount: items.length,
-      }),
+  await createOrderEvent(prisma, {
+    orderId: order.id,
+    eventType: 'ORDER_CREATED',
+    actorUserId: user.id,
+    payload: {
+      source: 'WEBSITE',
+      itemCount: items.length,
     },
   })
 
@@ -167,14 +167,13 @@ async function main() {
   })
 
   // 10. Order event for second order
-  await prisma.orderEvent.create({
-    data: {
-      orderId: order2.id,
-      eventType: 'ORDER_CREATED',
-      payloadJson: JSON.stringify({
-        source: 'WEBSITE',
-        itemCount: items2.length,
-      }),
+  await createOrderEvent(prisma, {
+    orderId: order2.id,
+    eventType: 'ORDER_CREATED',
+    actorUserId: user.id,
+    payload: {
+      source: 'WEBSITE',
+      itemCount: items2.length,
     },
   })
 

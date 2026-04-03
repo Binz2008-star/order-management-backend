@@ -1,4 +1,5 @@
 import { prisma } from '../../db/prisma'
+import { orderService } from '../../services/order.service'
 import { PaymentService as CanonicalPaymentService } from '../../services/payment.service'
 
 class PaymentServiceCompatibilityWrapper {
@@ -13,11 +14,9 @@ class PaymentServiceCompatibilityWrapper {
       },
     })
 
+    // Update payment type through proper service layer
     if (order.paymentType === 'CASH_ON_DELIVERY') {
-      await prisma.order.update({
-        where: { id: orderId },
-        data: { paymentType: 'CARD' },
-      })
+      await orderService.updateOrderPaymentType(orderId, 'CARD', actorUserId)
     }
 
     const attempt = await CanonicalPaymentService.createPaymentAttempt({

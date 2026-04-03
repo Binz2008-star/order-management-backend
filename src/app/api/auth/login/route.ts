@@ -24,7 +24,18 @@ async function login(loginData: unknown, request: NextRequest) {
   console.log('📊 Rate limit result:', { success: rateLimitResult.success })
 
   if (!rateLimitResult.success) {
-    throw new ApiError(429, 'Too many login attempts')
+    const statusCode = rateLimitResult.statusCode ?? 429
+    const message = statusCode === 503
+      ? 'Rate limiting service unavailable'
+      : 'Too many login attempts'
+
+    return NextResponse.json(
+      { error: message },
+      {
+        status: statusCode,
+        headers: rateLimitResult.headers,
+      }
+    )
   }
 
   const { email, password } = loginData as { email: string; password: string }

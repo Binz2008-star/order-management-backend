@@ -407,6 +407,38 @@ export class OrderService {
       }
     }
   }
+
+  async updateOrderPaymentType(orderId: string, paymentType: string, actorUserId?: string) {
+    return await prisma.$transaction(async (tx) => {
+      const order = await tx.order.findUnique({
+        where: { id: orderId },
+        select: { paymentType: true }
+      })
+
+      if (!order) {
+        throw new Error('Order not found')
+      }
+
+      const updatedOrder = await tx.order.update({
+        where: { id: orderId },
+        data: { paymentType }
+      })
+
+      // Create audit event for payment type change
+      await createOrderEvent(tx, {
+        orderId,
+        eventType: 'PAYMENT_TYPE_CHANGED',
+        actorUserId,
+        payload: {
+          from: order.paymentType,
+          to: paymentType,
+          reason: 'payment_type_update',
+        },
+      })
+
+      return updatedOrder
+    })
+  }
 }
 
 export const orderService = new OrderService()

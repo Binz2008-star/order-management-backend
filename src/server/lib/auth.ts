@@ -117,10 +117,7 @@ export async function authenticateUser(
   email: string,
   password: string
 ): Promise<AuthResult> {
-  console.log('Auth attempt:', { email, env: process.env.NODE_ENV, hasDb: !!process.env.DATABASE_URL, hasJwt: !!process.env.JWT_SECRET })
-
   try {
-    console.log('Authenticating with database...')
     const user = await prisma.user.findUnique({
       where: { email: email.toLowerCase().trim() },
       include: {

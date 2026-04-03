@@ -2,12 +2,12 @@ name: CI
 
 on:
   push:
-    branches: [main, production-hardening]
+    branches: [main]
   pull_request:
     branches: [main]
 
 jobs:
-  test:
+  quality:
     runs-on: ubuntu-latest
     services:
       postgres:
@@ -24,59 +24,79 @@ jobs:
           --health-timeout 5s
           --health-retries 5
 
-    steps:
-      - uses: actions/checkout@v6
+    env:
+      NODE_ENV: test
+      JWT_SECRET: test-jwt-secret-32-bytes-minimum-value
+      DATABASE_URL: postgresql://postgres:postgres@localhost:5432/order_management_test?schema=public
 
-      - uses: actions/setup-node@v6
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
         with:
-          node-version: '24'
+          node-version: '20'
           cache: npm
           cache-dependency-path: package-lock.json
 
       - name: Install dependencies
         run: npm ci
 
-      - name: Generate Prisma client
+      - name: Generate Prisma Client
         run: npx prisma generate
-        env:
-          DATABASE_URL: postgresql://postgres:postgres@localhost:5432/order_management_test?schema=public
 
       - name: Run migrations on test database
         run: npx prisma migrate deploy
+
+      - name: Type Check
+        run: npm run typecheck
+
+      - name: Lint
+        run: npm run lint
+
+      - name: Run Critical Tests
+        run: npm run test:critical -- --reporter=default
+
+  full-suite:
+    runs-on: ubuntu-latest
+    needs: quality
+    if: github.ref == 'refs/heads/main'
+    services:
+      postgres:
+        image: postgres:16
         env:
-          DATABASE_URL: postgresql://postgres:postgres@localhost:5432/order_management_test?schema=public
+          POSTGRES_DB: order_management_test
+          POSTGRES_USER: postgres
+          POSTGRES_PASSWORD: postgres
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U postgres -d order_management_test"
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
 
-      - name: Run lint
-        run: npx eslint . --format stylish --max-warnings=10
+    env:
+      NODE_ENV: test
+      JWT_SECRET: test-jwt-secret-32-bytes-minimum-value
+      DATABASE_URL: postgresql://postgres:postgres@localhost:5432/order_management_test?schema=public
 
-      - name: Run typecheck
-        run: npx tsc --noEmit
+    steps:
+      - uses: actions/checkout@v4
 
-      - name: Debug Prisma and test DB
-        run: |
-          echo "=== Prisma version ==="
-          npx prisma --version
-          echo "=== PostgreSQL readiness ==="
-          pg_isready -h localhost -p 5432 -U postgres -d order_management_test
-        env:
-          DATABASE_URL: postgresql://postgres:postgres@localhost:5432/order_management_test?schema=public
-          PGPASSWORD: postgres
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: npm
+          cache-dependency-path: package-lock.json
 
-      - name: Debug test environment
-        run: |
-          echo "NODE_ENV=$NODE_ENV"
-          echo "DATABASE_URL=$DATABASE_URL"
-          echo "PWD=$(pwd)"
-          echo "=== Files ==="
-          ls -la
-        env:
-          DATABASE_URL: postgresql://postgres:postgres@localhost:5432/order_management_test?schema=public
-          NODE_ENV: test
+      - name: Install dependencies
+        run: npm ci
 
-      - name: Run tests
-        run: |
-          echo "=== Running Vitest ==="
-          npx vitest run --reporter=verbose
-        env:
-          DATABASE_URL: postgresql://postgres:postgres@localhost:5432/order_management_test?schema=public
-          NODE_ENV: test
+      - name: Generate Prisma Client
+        run: npx prisma generate
+
+      - name: Run migrations on test database
+        run: npx prisma migrate deploy
+
+      - name: Run Full Test Suite
+        run: npm run test -- --reporter=default
