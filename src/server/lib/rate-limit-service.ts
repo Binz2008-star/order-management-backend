@@ -117,19 +117,16 @@ export class RateLimitService {
       const result = await this.primaryStore.check(key, this.config.maxRequests, this.config.windowMs)
 
       // Log successful rate limit check
-      logger.debug('Rate limit check successful', {
-        key,
-        store: this.primaryStore.constructor.name,
-        allowed: result.allowed,
-        remaining: result.remaining
-      })
+      if (!result.allowed) {
+        logger.warn(`RATE_LIMIT_HIT - key: ${key}, store: ${this.primaryStore.constructor.name}, remaining: ${result.remaining}`)
+      }
 
       return result
     } catch (error) {
       const errorMessage = error instanceof Error ? error.message : 'Unknown error'
 
       // CRITICAL: Log fallback activation with observability data
-      logger.error(`Rate limiting fallback activated - key: ${key}, policy: ${fallbackPolicy}, store: ${this.primaryStore.constructor.name}, error: ${errorMessage}`)
+      logger.error(`RATE_LIMIT_FALLBACK - key: ${key}, policy: ${fallbackPolicy}, store: ${this.primaryStore.constructor.name}, error: ${errorMessage}`)
 
       return this.handleFallback(key, fallbackPolicy)
     }

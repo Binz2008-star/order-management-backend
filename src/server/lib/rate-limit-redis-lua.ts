@@ -94,7 +94,9 @@ export class RedisRateLimitStore implements RateLimitStore {
       const [current, remaining, allowed] = result as [number, number, number]
       const resetTime = Date.now() + windowMs
 
-      if (!allowed) {
+      const isAllowed = Boolean(allowed) // Convert number to boolean
+
+      if (!isAllowed) {
         logger.warn('Rate limit exceeded', {
           key: redisKey,
           count: current,
@@ -103,7 +105,7 @@ export class RedisRateLimitStore implements RateLimitStore {
         })
       }
 
-      return { allowed, remaining, resetTime }
+      return { allowed: isAllowed, remaining, resetTime }
     } catch (error) {
       logger.error('Redis rate limiting error', error as Error)
       throw error
