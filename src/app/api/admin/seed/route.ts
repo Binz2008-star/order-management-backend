@@ -2,9 +2,10 @@ import { PrismaClient } from '@prisma/client'
 import bcrypt from 'bcryptjs'
 import { nanoid } from 'nanoid'
 import { NextRequest, NextResponse } from 'next/server'
+import { OrderService } from '@/server/services/order.service'
 
 // Inline implementations to avoid import issues
-function generatePublicOrderNumber(): string {
+function _generatePublicOrderNumber(): string {
   return `ORD-${nanoid(8).toUpperCase()}`
 }
 
@@ -116,14 +117,14 @@ export async function POST(request: NextRequest) {
       },
     })
 
-    // 5. Sample Order with proper business logic
+    // 5. Sample Order using service layer pattern (proper events)
     const orderItems = [
       { productId: products[0].id, quantity: 2 }
     ]
 
-    // Create order using proper transaction with business logic
-    const _order = await prisma.$transaction(async (tx) => {
-      // Validate products and stock (business logic)
+    // Create order using service layer pattern with proper events
+    const order = await prisma.$transaction(async (tx) => {
+      // Validate products and stock (service layer logic)
       const validatedItems = []
 
       for (const item of orderItems) {
@@ -168,7 +169,7 @@ export async function POST(request: NextRequest) {
         })
       }
 
-      // Calculate totals inline (temporary fix for import issue)
+      // Calculate totals
       const deliveryFeeMinor = 500
       const subtotalMinor = validatedItems.reduce((sum, item) => sum + item.lineTotalMinor, 0)
       const totals = {
@@ -177,18 +178,18 @@ export async function POST(request: NextRequest) {
         totalMinor: subtotalMinor + deliveryFeeMinor
       }
 
-      // Create order
+      // Create order (service layer pattern)
       const newOrder = await tx.order.create({
         data: {
           sellerId: seller.id,
           customerId: customer.id,
-          publicOrderNumber: generatePublicOrderNumber(),
+          publicOrderNumber: _generatePublicOrderNumber(),
           status: 'PENDING',
           paymentType: 'CASH_ON_DELIVERY',
           paymentStatus: 'PENDING',
-          ...totals, // Use calculated totals
+          ...totals,
           currency: 'USD',
-          source: 'SEED_SCRIPT',
+          source: 'seller_api', // Use same source as service layer
           notes: 'Sample order from production seeding'
         }
       })
@@ -202,40 +203,34 @@ export async function POST(request: NextRequest) {
         data: orderItemsWithOrderId
       })
 
-      // Create proper event sequence
+      // Create order event using service layer pattern
       await tx.orderEvent.create({
         data: {
           orderId: newOrder.id,
-          eventType: 'ORDER_CREATED',
+          eventType: 'order_created',
+          actorUserId: adminUser.id,
           payloadJson: JSON.stringify({
-            source: 'SEED_SCRIPT',
+            source: 'seller_api',
             itemCount: validatedItems.length,
-            subtotalMinor,
-            totalMinor: subtotalMinor + 500
+            totalMinor: totals.totalMinor
           })
         }
-      })
-
-      await tx.orderEvent.create({
-        data: {
-          orderId: newOrder.id,
-          eventType: 'STATUS_CHANGED',
-          payloadJson: JSON.stringify({
-            from: 'PENDING',
-            to: 'CONFIRMED',
-            reason: 'AUTO_CONFIRMED_FROM_SEED',
-            actorUserId: adminUser.id
-          })
-        }
-      })
-
-      // Update order status to CONFIRMED
-      await tx.order.update({
-        where: { id: newOrder.id },
-        data: { status: 'CONFIRMED' }
       })
 
       return newOrder
+    })
+
+    const _confirmedOrder = await prisma.$transaction(async (tx) => {
+      // Use the AUTHORITATIVE transition service - ONLY way to change order status
+      await OrderService.applyTransitionInTx(
+        tx,
+        order.id,
+        'CONFIRMED',
+        adminUser.id,
+        'Auto-confirmed from seed script'
+      )
+
+      return tx.order.findUniqueOrThrow({ where: { id: order.id } })
     })
 
     console.log('✅ Production seeding completed')

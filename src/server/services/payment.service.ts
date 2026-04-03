@@ -2,6 +2,7 @@ import { Prisma } from '@prisma/client'
 import { prisma } from '../db/prisma'
 import { logger } from '../lib/logger'
 import { createOrderEvent } from '../modules/orders/event.service'
+import { OrderService } from './order.service'
 
 type Tx = Prisma.TransactionClient
 
@@ -173,11 +174,20 @@ export class PaymentService {
       })
 
       if (data.status === 'COMPLETED') {
-        await this.handlePaymentCompletion(tx, attempt.orderId)
+        await this.handlePaymentCompletion(tx, attempt.orderId, {
+          emitPaymentCompletedEvent: false,
+          provider: attempt.provider,
+          amountMinor: attempt.amountMinor,
+          currency: attempt.currency,
+          providerReference: data.providerReference ?? attempt.providerReference ?? undefined,
+        })
       }
 
       if (['FAILED', 'CANCELLED'].includes(data.status)) {
-        await this.handlePaymentFailure(tx, attempt.orderId)
+        await this.handlePaymentFailure(tx, attempt.orderId, {
+          emitPaymentFailedEvent: false,
+          failureReason: data.failureReason,
+        })
       }
 
       return updated
@@ -228,18 +238,16 @@ export class PaymentService {
         },
       })
 
-      await tx.order.update({
-        where: { id: attempt.orderId },
-        data: { paymentStatus: 'REFUNDED' }
-      })
-
-      await createOrderEvent(tx, {
+      await this.updateOrderPaymentStatusInTx(tx, {
         orderId: attempt.orderId,
-        eventType: 'payment_refunded',
-        actorUserId: actorUserId ?? null,
-        payload: {
-          refundAmountMinor: data.refundAmountMinor,
-          reason: data.reason,
+        paymentStatus: 'REFUNDED',
+        event: {
+          eventType: 'payment_refunded',
+          actorUserId: actorUserId ?? null,
+          payload: {
+            refundAmountMinor: data.refundAmountMinor,
+            reason: data.reason,
+          },
         },
       })
 
@@ -265,61 +273,61 @@ export class PaymentService {
 
   private static async handlePaymentCompletion(
     tx: Tx,
-    orderId: string
+    orderId: string,
+    options?: {
+      emitPaymentCompletedEvent?: boolean
+      provider?: string
+      amountMinor?: number
+      currency?: string
+      providerReference?: string
+    }
   ) {
-    await tx.order.update({
-      where: { id: orderId },
-      data: { paymentStatus: 'PAID' }
-    })
-
-    // Create system payment completion event for webhook confirmations
-    await createOrderEvent(tx, {
+    await this.updateOrderPaymentStatusInTx(tx, {
       orderId,
-      eventType: 'payment_completed',
-      actorUserId: null, // System event
-      payload: {
-        timestamp: new Date().toISOString(),
-        provider: 'webhook',
-        amountMinor: 0, // System events don't have amount
-        currency: 'USD',
+      paymentStatus: 'PAID',
+      event: options?.emitPaymentCompletedEvent === false ? undefined : {
+        eventType: 'payment_completed',
+        actorUserId: null,
+        payload: {
+          timestamp: new Date().toISOString(),
+          provider: options?.provider ?? 'webhook',
+          amountMinor: options?.amountMinor ?? 0,
+          currency: options?.currency ?? 'USD',
+          providerReference: options?.providerReference ?? null,
+        },
       },
     })
 
     const order = await tx.order.findUnique({ where: { id: orderId } })
     if (order && order.status === 'PENDING') {
-      await tx.order.update({
-        where: { id: orderId },
-        data: { status: 'CONFIRMED' }
-      })
-
-      await createOrderEvent(tx, {
+      await OrderService.applyTransitionInTx(
+        tx,
         orderId,
-        eventType: 'status_changed',
-        actorUserId: null,
-        payload: {
-          from: 'PENDING',
-          to: 'CONFIRMED',
-          reason: 'payment_completed',
-        },
-      })
+        'CONFIRMED',
+        null,
+        'payment_completed'
+      )
     }
   }
 
   private static async handlePaymentFailure(
     tx: Tx,
-    orderId: string
+    orderId: string,
+    options?: {
+      emitPaymentFailedEvent?: boolean
+      failureReason?: string
+    }
   ) {
-    await tx.order.update({
-      where: { id: orderId },
-      data: { paymentStatus: 'FAILED' }
-    })
-
-    await createOrderEvent(tx, {
+    await this.updateOrderPaymentStatusInTx(tx, {
       orderId,
-      eventType: 'payment_failed',
-      actorUserId: null,
-      payload: {
-        timestamp: new Date().toISOString(),
+      paymentStatus: 'FAILED',
+      event: options?.emitPaymentFailedEvent === false ? undefined : {
+        eventType: 'payment_failed',
+        actorUserId: null,
+        payload: {
+          timestamp: new Date().toISOString(),
+          failureReason: options?.failureReason ?? null,
+        },
       },
     })
   }
@@ -398,7 +406,13 @@ export class PaymentService {
       }
 
       // Handle payment completion (order status transition + events)
-      await this.handlePaymentCompletion(tx, updatedAttempt.orderId)
+      await this.handlePaymentCompletion(tx, updatedAttempt.orderId, {
+        emitPaymentCompletedEvent: true,
+        provider: updatedAttempt.provider,
+        amountMinor: updatedAttempt.amountMinor,
+        currency: updatedAttempt.currency,
+        providerReference: updatedAttempt.providerReference ?? data.providerReference,
+      })
 
       return updatedAttempt
     })
@@ -430,5 +444,32 @@ export class PaymentService {
         }
       }
     })
+  }
+
+  private static async updateOrderPaymentStatusInTx(
+    tx: Tx,
+    data: {
+      orderId: string
+      paymentStatus: string
+      event?: {
+        eventType: string
+        actorUserId: string | null
+        payload: Record<string, unknown>
+      }
+    }
+  ) {
+    await tx.order.update({
+      where: { id: data.orderId },
+      data: { paymentStatus: data.paymentStatus },
+    })
+
+    if (data.event) {
+      await createOrderEvent(tx, {
+        orderId: data.orderId,
+        eventType: data.event.eventType,
+        actorUserId: data.event.actorUserId,
+        payload: data.event.payload,
+      })
+    }
   }
 }

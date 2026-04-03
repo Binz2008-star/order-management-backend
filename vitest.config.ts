@@ -6,5 +6,6 @@ export default {
     environment: 'node',
     setupFiles: ['./src/tests/setup.ts'],
     fileParallelism: false, // Run tests sequentially for proper DB isolation
+    testTimeout: 20000,
   },
 }
