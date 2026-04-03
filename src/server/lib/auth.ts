@@ -117,34 +117,10 @@ export async function authenticateUser(
   email: string,
   password: string
 ): Promise<AuthResult> {
-  console.log(' Auth attempt:', { email, env: process.env.NODE_ENV, hasDb: !!process.env.DATABASE_URL, hasJwt: !!process.env.JWT_SECRET })
-
-  // Fallback for demo environment when database is not available
-  if (process.env.NODE_ENV === 'production' &&
-    (process.env.DATABASE_URL?.startsWith('file:') || !process.env.DATABASE_URL)) {
-
-    console.log(' Using demo fallback in production')
-
-    // Demo user fallback for production without database
-    if (email === 'demo@seller.com' && password === 'demo123') {
-      const authUser: AuthUser = {
-        id: 'demo-user-id',
-        email: 'demo@seller.com',
-        role: 'SELLER',
-        sellerId: 'demo-seller-id',
-      }
-
-      return {
-        user: authUser,
-        token: generateToken(authUser),
-      }
-    }
-
-    throw new ApiError(401, 'Invalid credentials')
-  }
+  console.log('Auth attempt:', { email, env: process.env.NODE_ENV, hasDb: !!process.env.DATABASE_URL, hasJwt: !!process.env.JWT_SECRET })
 
   try {
-    console.log(' Trying database auth...')
+    console.log('Authenticating with database...')
     const user = await prisma.user.findUnique({
       where: { email: email.toLowerCase().trim() },
       include: {
@@ -175,23 +151,8 @@ export async function authenticateUser(
       user: authUser,
       token: generateToken(authUser),
     }
-  } catch (_error) {
-    console.log(' Database auth failed, trying fallback...')
-    // If database fails, fallback to demo user if credentials match
-    if (email === 'demo@seller.com' && password === 'demo123') {
-      const authUser: AuthUser = {
-        id: 'demo-user-id',
-        email: 'demo@seller.com',
-        role: 'SELLER',
-        sellerId: 'demo-seller-id',
-      }
-
-      return {
-        user: authUser,
-        token: generateToken(authUser),
-      }
-    }
-
+  } catch (error) {
+    console.error('Database authentication failed:', error)
     throw new ApiError(401, 'Invalid credentials')
   }
 }

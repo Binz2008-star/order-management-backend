@@ -156,7 +156,12 @@ npm run test:coverage
 
 ## 🚨 Rate Limiting
 
-Redis-backed rate limiting with memory fallback:
+Redis-backed rate limiting with memory fallback. For production, prefer either:
+
+- `REDIS_URL` for a standard Redis connection
+- `UPSTASH_REDIS_REST_URL` + `UPSTASH_REDIS_REST_TOKEN` for Upstash on serverless
+
+Current limits:
 
 - **Public API**: 10 requests/minute
 - **Auth endpoints**: 5 requests/minute

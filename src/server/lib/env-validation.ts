@@ -30,6 +30,7 @@ export function validateProductionEnvironment(): EnvValidationResult {
   const optional = [
     'REDIS_URL',
     'UPSTASH_REDIS_REST_URL',
+    'UPSTASH_REDIS_REST_TOKEN',
     'STRIPE_WEBHOOK_SECRET',
     'WHATSAPP_WEBHOOK_SECRET'
   ]
@@ -56,6 +57,8 @@ export function validateProductionEnvironment(): EnvValidationResult {
   if (process.env.NODE_ENV === 'production') {
     if (!process.env.REDIS_URL && !process.env.UPSTASH_REDIS_REST_URL) {
       warnings.push('Rate limiting will fall back to in-memory storage - not recommended for production')
+    } else if (process.env.UPSTASH_REDIS_REST_URL && !process.env.UPSTASH_REDIS_REST_TOKEN) {
+      errors.push('UPSTASH_REDIS_REST_TOKEN is required when UPSTASH_REDIS_REST_URL is configured')
     }
 
     if (process.env.DATABASE_URL?.includes('dev.db')) {

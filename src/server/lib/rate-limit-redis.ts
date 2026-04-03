@@ -23,6 +23,122 @@ interface RedisClient {
   }
 }
 
+interface UpstashResponse<T> {
+  result?: T
+  error?: string
+}
+
+class UpstashRestClient implements RedisClient {
+  constructor(
+    private readonly baseUrl: string,
+    private readonly token: string
+  ) {}
+
+  private async request<T>(command: string[], method: 'GET' | 'POST' = 'POST'): Promise<T> {
+    const encodedCommand = command.map((part) => encodeURIComponent(part)).join('/')
+    const url = `${this.baseUrl}/${encodedCommand}`
+
+    const response = await fetch(url, {
+      method,
+      headers: {
+        Authorization: `Bearer ${this.token}`,
+      },
+    })
+
+    if (!response.ok) {
+      throw new Error(`Upstash request failed with status ${response.status}`)
+    }
+
+    const payload = await response.json() as UpstashResponse<T>
+
+    if (payload.error) {
+      throw new Error(payload.error)
+    }
+
+    if (typeof payload.result === 'undefined') {
+      throw new Error('Upstash response did not include a result')
+    }
+
+    return payload.result
+  }
+
+  async get(key: string): Promise<string | null> {
+    return this.request<string | null>(['get', key], 'GET')
+  }
+
+  async set(key: string, value: string, mode?: 'EX' | 'PX' | 'NX' | 'XX', duration?: number): Promise<string | null> {
+    const command = ['set', key, value]
+    if (mode) {
+      command.push(mode)
+    }
+    if (typeof duration === 'number') {
+      command.push(duration.toString())
+    }
+
+    return this.request<string | null>(command)
+  }
+
+  async incr(key: string): Promise<number> {
+    return this.request<number>(['incr', key])
+  }
+
+  async expire(key: string, seconds: number): Promise<boolean> {
+    const result = await this.request<number>(['expire', key, seconds.toString()])
+    return result === 1
+  }
+
+  async del(key: string): Promise<number> {
+    return this.request<number>(['del', key])
+  }
+
+  multi() {
+    const commands: string[][] = []
+
+    return {
+      incr: (key: string) => {
+        commands.push(['incr', key])
+      },
+      expire: (key: string, seconds: number) => {
+        commands.push(['expire', key, seconds.toString()])
+      },
+      exec: async (): Promise<[number, boolean] | null> => {
+        const response = await fetch(`${this.baseUrl}/pipeline`, {
+          method: 'POST',
+          headers: {
+            Authorization: `Bearer ${this.token}`,
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify(commands),
+        })
+
+        if (!response.ok) {
+          throw new Error(`Upstash pipeline failed with status ${response.status}`)
+        }
+
+        const payload = await response.json() as Array<UpstashResponse<number>>
+
+        if (!Array.isArray(payload) || payload.length !== commands.length) {
+          throw new Error('Unexpected Upstash pipeline response')
+        }
+
+        const results = payload.map((entry) => {
+          if (entry.error) {
+            throw new Error(entry.error)
+          }
+
+          if (typeof entry.result === 'undefined') {
+            throw new Error('Upstash pipeline entry missing result')
+          }
+
+          return entry.result
+        })
+
+        return [results[0], results[1] === 1]
+      }
+    }
+  }
+}
+
 class RedisRateLimiter {
   private redis: RedisClient | null = null
   private isRedisAvailable = false
@@ -34,32 +150,25 @@ class RedisRateLimiter {
 
   private async initializeRedis() {
     try {
-      // Try to import and initialize Redis
-      const redis = await import('redis')
+      const standardRedisUrl = this.config.redisUrl || process.env.REDIS_URL
+      const upstashRestUrl = process.env.UPSTASH_REDIS_REST_URL
+      const upstashRestToken = process.env.UPSTASH_REDIS_REST_TOKEN
 
-      const redisUrl = this.config.redisUrl || process.env.REDIS_URL || process.env.UPSTASH_REDIS_REST_URL
-      if (!redisUrl) {
-        throw new Error('Redis URL is not configured')
-      }
+      if (standardRedisUrl) {
+        // Try to import and initialize Redis
+        const redis = await import('redis')
 
-      // Create Redis client
-      if (redisUrl.startsWith('redis://')) {
         // Standard Redis
-        this.redis = redis.createClient({ url: redisUrl }) as unknown as RedisClient
+        this.redis = redis.createClient({ url: standardRedisUrl }) as unknown as RedisClient
         if (this.redis.connect) {
           await this.redis.connect()
         }
+      } else if (upstashRestUrl && upstashRestToken) {
+        this.redis = new UpstashRestClient(upstashRestUrl.replace(/\/$/, ''), upstashRestToken)
+      } else if (upstashRestUrl && !upstashRestToken) {
+        throw new Error('UPSTASH_REDIS_REST_TOKEN is required when UPSTASH_REDIS_REST_URL is configured')
       } else {
-        // Upstash Redis REST
-        this.redis = redis.createClient({
-          url: redisUrl,
-          socket: {
-            tls: true
-          }
-        }) as unknown as RedisClient
-        if (this.redis.connect) {
-          await this.redis.connect()
-        }
+        throw new Error('Redis is not configured. Set REDIS_URL or both UPSTASH_REDIS_REST_URL and UPSTASH_REDIS_REST_TOKEN')
       }
 
       this.isRedisAvailable = true
