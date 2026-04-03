@@ -60,8 +60,8 @@ export class RateLimitService {
 
   constructor(config: RateLimitConfig) {
     this.config = config
-    this.primaryStore = this.createPrimaryStore()
     this.fallbackStore = new MemoryRateLimitStore()
+    this.primaryStore = this.createPrimaryStore()
   }
 
   private createPrimaryStore(): RateLimitStore {
@@ -118,15 +118,17 @@ export class RateLimitService {
 
       // Log successful rate limit check
       if (!result.allowed) {
-        logger.warn(`RATE_LIMIT_HIT - key: ${key}, store: ${this.primaryStore.constructor.name}, remaining: ${result.remaining}`)
+        const storeName = this.primaryStore?.constructor?.name || 'Unknown'
+        logger.warn(`RATE_LIMIT_HIT - key: ${key}, store: ${storeName}, remaining: ${result.remaining}`)
       }
 
       return result
     } catch (error) {
       const errorMessage = error instanceof Error ? error.message : 'Unknown error'
+      const storeName = this.primaryStore?.constructor?.name || 'Unknown'
 
       // CRITICAL: Log fallback activation with observability data
-      logger.error(`RATE_LIMIT_FALLBACK - key: ${key}, policy: ${fallbackPolicy}, store: ${this.primaryStore.constructor.name}, error: ${errorMessage}`)
+      logger.error(`RATE_LIMIT_FALLBACK - key: ${key}, policy: ${fallbackPolicy}, store: ${storeName}, error: ${errorMessage}`)
 
       return this.handleFallback(key, fallbackPolicy)
     }
