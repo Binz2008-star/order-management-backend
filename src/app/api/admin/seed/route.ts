@@ -1,16 +1,33 @@
 import { PrismaClient } from '@prisma/client'
 import bcrypt from 'bcryptjs'
+import { nanoid } from 'nanoid'
 import { NextRequest, NextResponse } from 'next/server'
-import { calculateOrderTotal, generatePublicOrderNumber } from '../../../../server/lib/utils'
+
+// Inline implementations to avoid import issues
+function generatePublicOrderNumber(): string {
+  return `ORD-${nanoid(8).toUpperCase()}`
+}
 
 const prisma = new PrismaClient()
 
 export async function POST(request: NextRequest) {
   try {
-    // Security: In production, add proper authentication/authorization
+    // Enhanced security: Require proper admin seed token
     if (process.env.NODE_ENV === 'production') {
+      const seedToken = process.env.ADMIN_SEED_TOKEN
+      if (!seedToken) {
+        console.error('❌ ADMIN_SEED_TOKEN not configured in production')
+        return NextResponse.json({
+          error: 'Seed endpoint not properly configured'
+        }, { status: 500 })
+      }
+
       const authHeader = request.headers.get('authorization')
-      if (!authHeader?.startsWith('Bearer admin-seed-token')) {
+      if (!authHeader?.startsWith('Bearer ') || authHeader.substring(7) !== seedToken) {
+        console.warn('🚨 Unauthorized seed attempt', {
+          hasHeader: !!authHeader,
+          headerLength: authHeader?.length || 0
+        })
         return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
       }
     }
@@ -99,53 +116,126 @@ export async function POST(request: NextRequest) {
       },
     })
 
-    // 5. Sample Order
-    const items = [
-      { product: products[0], quantity: 2 },
+    // 5. Sample Order with proper business logic
+    const orderItems = [
+      { productId: products[0].id, quantity: 2 }
     ]
 
-    const totals = calculateOrderTotal(
-      items.map(i => ({
-        unitPriceMinor: i.product.priceMinor,
-        quantity: i.quantity,
-      })),
-      500
-    )
+    // Create order using proper transaction with business logic
+    const _order = await prisma.$transaction(async (tx) => {
+      // Validate products and stock (business logic)
+      const validatedItems = []
 
-    const order = await prisma.order.create({
-      data: {
-        sellerId: seller.id,
-        customerId: customer.id,
-        publicOrderNumber: generatePublicOrderNumber(),
-        ...totals,
-        currency: 'USD',
-        status: 'CONFIRMED',
-        paymentStatus: 'PENDING',
-        paymentType: 'CASH_ON_DELIVERY',
-        source: 'WEBSITE',
-      },
-    })
+      for (const item of orderItems) {
+        const product = await tx.product.findFirst({
+          where: {
+            id: item.productId,
+            sellerId: seller.id,
+            isActive: true
+          }
+        })
 
-    await prisma.orderItem.createMany({
-      data: items.map(i => ({
-        orderId: order.id,
-        productId: i.product.id,
-        productNameSnapshot: i.product.name,
-        unitPriceMinor: i.product.priceMinor,
-        quantity: i.quantity,
-        lineTotalMinor: i.product.priceMinor * i.quantity,
-      })),
-    })
+        if (!product) {
+          throw new Error(`Product ${item.productId} not found or inactive`)
+        }
 
-    await prisma.orderEvent.create({
-      data: {
-        orderId: order.id,
-        eventType: 'ORDER_CREATED',
-        payloadJson: JSON.stringify({
-          source: 'WEBSITE',
-          itemCount: items.length,
-        }),
-      },
+        if (product.stockQuantity < item.quantity) {
+          throw new Error(`Insufficient stock for product ${product.name}`)
+        }
+
+        // Update stock with proper concurrency handling
+        const stockUpdate = await tx.product.update({
+          where: { id: item.productId },
+          data: {
+            stockQuantity: { decrement: item.quantity }
+          }
+        })
+
+        // Verify stock was sufficient (handles race condition)
+        if (stockUpdate.stockQuantity < 0) {
+          throw new Error(`Insufficient stock for product ${product.name}. Available: ${product.stockQuantity}, Requested: ${item.quantity}`)
+        }
+
+        const unitPriceMinor = product.priceMinor
+        const lineTotalMinor = unitPriceMinor * item.quantity
+
+        validatedItems.push({
+          productId: item.productId,
+          productNameSnapshot: product.name,
+          unitPriceMinor,
+          quantity: item.quantity,
+          lineTotalMinor
+        })
+      }
+
+      // Calculate totals inline (temporary fix for import issue)
+      const deliveryFeeMinor = 500
+      const subtotalMinor = validatedItems.reduce((sum, item) => sum + item.lineTotalMinor, 0)
+      const totals = {
+        subtotalMinor,
+        deliveryFeeMinor,
+        totalMinor: subtotalMinor + deliveryFeeMinor
+      }
+
+      // Create order
+      const newOrder = await tx.order.create({
+        data: {
+          sellerId: seller.id,
+          customerId: customer.id,
+          publicOrderNumber: generatePublicOrderNumber(),
+          status: 'PENDING',
+          paymentType: 'CASH_ON_DELIVERY',
+          paymentStatus: 'PENDING',
+          ...totals, // Use calculated totals
+          currency: 'USD',
+          source: 'SEED_SCRIPT',
+          notes: 'Sample order from production seeding'
+        }
+      })
+
+      // Create order items
+      const orderItemsWithOrderId = validatedItems.map(item => ({
+        ...item,
+        orderId: newOrder.id
+      }))
+      await tx.orderItem.createMany({
+        data: orderItemsWithOrderId
+      })
+
+      // Create proper event sequence
+      await tx.orderEvent.create({
+        data: {
+          orderId: newOrder.id,
+          eventType: 'ORDER_CREATED',
+          payloadJson: JSON.stringify({
+            source: 'SEED_SCRIPT',
+            itemCount: validatedItems.length,
+            subtotalMinor,
+            totalMinor: subtotalMinor + 500
+          })
+        }
+      })
+
+      await tx.orderEvent.create({
+        data: {
+          orderId: newOrder.id,
+          eventType: 'STATUS_CHANGED',
+          payloadJson: JSON.stringify({
+            from: 'PENDING',
+            to: 'CONFIRMED',
+            reason: 'AUTO_CONFIRMED_FROM_SEED',
+            actorUserId: adminUser.id
+          })
+        }
+      })
+
+      // Update order status to CONFIRMED
+      await tx.order.update({
+        where: { id: newOrder.id },
+        data: { status: 'CONFIRMED' }
+      })
+
+      return newOrder
     })
 
     console.log('✅ Production seeding completed')
