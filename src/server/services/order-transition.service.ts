@@ -1,6 +1,6 @@
 import { Prisma } from '@prisma/client'
 import { logger } from '../lib/logger'
-import { createOrderEvent } from '../modules/orders/event.service'
+import { createOrderEvent } from './order-event.service'
 
 export interface OrderTransitionRequest {
   orderId: string

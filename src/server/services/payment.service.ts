@@ -1,7 +1,7 @@
 import { Prisma } from '@prisma/client'
 import { prisma } from '../db/prisma'
 import { logger } from '../lib/logger'
-import { createOrderEvent } from '../modules/orders/event.service'
+import { createOrderEvent } from './order-event.service'
 import { OrderService } from './order.service'
 
 type Tx = Prisma.TransactionClient

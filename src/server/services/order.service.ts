@@ -1,14 +1,14 @@
 import { Order, OrderItem, Prisma } from '@prisma/client'
 import { prisma } from '../db/prisma'
 import { logger } from '../lib/logger'
-import { createOrderEvent } from '../modules/orders/event.service'
+import { createOrderEvent } from './order-event.service'
 import { applyOrderTransitionInTx } from './order-transition.service'
 import {
   OrderStatus,
   OrderTransitionError,
   isTerminalOrderStatus,
   isValidOrderTransition
-} from '../modules/orders/transitions'
+} from './order-transitions'
 
 type OrderStatusType = typeof OrderStatus[keyof typeof OrderStatus]
 

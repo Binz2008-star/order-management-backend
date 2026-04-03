@@ -2,8 +2,8 @@ import { prisma } from '@/server/db/prisma'
 import { getCurrentUser, requireSeller } from '@/server/lib/auth'
 import { ApiError, handleApiError } from '@/server/lib/errors'
 import { UpdateOrderStatusSchema } from '@/server/lib/validation'
-import { OrderTransitionError } from '@/server/modules/orders/transitions'
 import { orderService } from '@/server/services/order.service'
+import { OrderTransitionError } from '@/server/services/order-transitions'
 import { NextRequest, NextResponse } from 'next/server'
 
 function isOrderTransitionError(error: unknown): error is OrderTransitionError {

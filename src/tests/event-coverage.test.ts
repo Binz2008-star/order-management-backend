@@ -1,5 +1,5 @@
 import { beforeEach, describe, expect, it } from 'vitest'
-import { eventService } from '../server/modules/orders/event.service'
+import { eventService } from '../server/services/order-event.service'
 import { orderService } from '../server/modules/orders/order.service'
 import { paymentService } from '../server/modules/orders/payment.service'
 import { prisma } from '../tests/setup'

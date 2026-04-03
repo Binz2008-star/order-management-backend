@@ -1,6 +1,6 @@
 import { beforeEach, describe, expect, it } from 'vitest'
 import { generatePublicOrderNumber } from '../server/lib/utils'
-import { createOrderEvent } from '../server/modules/orders/event.service'
+import { createOrderEvent } from '../server/services/order-event.service'
 import { prisma } from './setup'
 
 describe('Order Creation', () => {

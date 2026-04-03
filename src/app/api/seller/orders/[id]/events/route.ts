@@ -1,7 +1,7 @@
 import { prisma } from '@/server/db/prisma'
 import { getCurrentUser, requireSeller } from '@/server/lib/auth'
 import { ApiError } from '@/server/lib/errors'
-import { eventService } from '@/server/modules/orders/event.service'
+import { eventService } from '@/server/services/order-event.service'
 import { NextRequest, NextResponse } from 'next/server'
 
 function safeParseJson(value: string | null) {

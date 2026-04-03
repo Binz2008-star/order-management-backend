@@ -3,7 +3,7 @@ import bcrypt from 'bcryptjs'
 import { nanoid } from 'nanoid'
 import { NextRequest, NextResponse } from 'next/server'
 import { OrderService } from '@/server/services/order.service'
-import { createOrderEvent } from '@/server/modules/orders/event.service'
+import { createOrderEvent } from '@/server/services/order-event.service'
 
 // Inline implementations to avoid import issues
 function _generatePublicOrderNumber(): string {
