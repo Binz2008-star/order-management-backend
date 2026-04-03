@@ -9,6 +9,20 @@ on:
 jobs:
   test:
     runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_DB: order_management_test
+          POSTGRES_USER: postgres
+          POSTGRES_PASSWORD: postgres
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U postgres -d order_management_test"
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
 
     steps:
       - uses: actions/checkout@v6
@@ -24,11 +38,13 @@ jobs:
 
       - name: Generate Prisma client
         run: npx prisma generate
+        env:
+          DATABASE_URL: postgresql://postgres:postgres@localhost:5432/order_management_test?schema=public
 
       - name: Run migrations on test database
         run: npx prisma migrate deploy
         env:
-          DATABASE_URL: file:./test.db
+          DATABASE_URL: postgresql://postgres:postgres@localhost:5432/order_management_test?schema=public
 
       - name: Run lint
         run: npx eslint . --format stylish --max-warnings=10
@@ -40,12 +56,11 @@ jobs:
         run: |
           echo "=== Prisma version ==="
           npx prisma --version
-          echo "=== Confirm database file ==="
-          ls -la
-          echo "=== SQLite file check ==="
-          test -f ./test.db && echo "test.db exists" || echo "test.db missing"
+          echo "=== PostgreSQL readiness ==="
+          pg_isready -h localhost -p 5432 -U postgres -d order_management_test
         env:
-          DATABASE_URL: file:./test.db
+          DATABASE_URL: postgresql://postgres:postgres@localhost:5432/order_management_test?schema=public
+          PGPASSWORD: postgres
 
       - name: Debug test environment
         run: |
@@ -55,7 +70,7 @@ jobs:
           echo "=== Files ==="
           ls -la
         env:
-          DATABASE_URL: file:./test.db
+          DATABASE_URL: postgresql://postgres:postgres@localhost:5432/order_management_test?schema=public
           NODE_ENV: test
 
       - name: Run tests
@@ -63,5 +78,5 @@ jobs:
           echo "=== Running Vitest ==="
           npx vitest run --reporter=verbose
         env:
-          DATABASE_URL: file:./test.db
+          DATABASE_URL: postgresql://postgres:postgres@localhost:5432/order_management_test?schema=public
           NODE_ENV: test
