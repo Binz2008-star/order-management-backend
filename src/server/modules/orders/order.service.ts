@@ -16,15 +16,15 @@ class OrderServiceCompatibilityWrapper {
     items: Array<{ productId: string; quantity: number }>
     deliveryFeeMinor?: number
     notes?: string
-  }, _actorUserId?: string) {
+  }, actorUserId?: string) {
     return canonicalOrderService.createOrder({
       sellerId: request.sellerId,
       customerId: request.customerId,
       items: request.items,
       currency: 'USD',
-      paymentType: 'CASH_ON_DELIVERY',
+      paymentType: 'CARD',
       notes: request.notes,
-    })
+    }, actorUserId ?? null)
   }
 
   async applyTransition(request: OrderTransitionRequest) {

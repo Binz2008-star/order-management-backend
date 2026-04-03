@@ -32,7 +32,7 @@ export interface UpdateOrderStatusData {
 }
 
 export class OrderService {
-  async createOrder(data: CreateOrderData) {
+  async createOrder(data: CreateOrderData, actorUserId: string | null = null) {
     logger.info('Creating order', { sellerId: data.sellerId, itemCount: data.items.length })
 
     return await prisma.$transaction(async (tx) => {
@@ -125,7 +125,7 @@ export class OrderService {
       // Log order creation event using centralized service
       await createOrderEvent(tx, {
         orderId: order.id,
-        actorUserId: null, // System created
+        actorUserId,
         eventType: 'order_created',
         payload: {
           publicOrderNumber,
