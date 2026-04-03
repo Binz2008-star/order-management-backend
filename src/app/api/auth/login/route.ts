@@ -1,6 +1,6 @@
 import { authenticateUser } from '@/server/lib/auth'
 import { ApiError } from '@/server/lib/errors'
-import { RATE_LIMIT_CONFIGS, createRateLimit } from '@/server/lib/rate-limit-redis'
+import { RATE_LIMIT_CONFIGS, createRateLimit } from '@/server/lib/rate-limit-service'
 import { NextRequest, NextResponse } from 'next/server'
 import { z } from 'zod'
 
