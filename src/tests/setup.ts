@@ -29,14 +29,16 @@ vi.mock('next/server', () => ({
 
 // Setup test environment variables
 process.env.JWT_SECRET = 'test-jwt-secret'
-process.env.DATABASE_URL = 'file:./test.db'
+process.env.DATABASE_URL ??= 'postgresql://postgres:postgres@localhost:5432/order_management_test?schema=public'
+
+const databaseUrl = process.env.DATABASE_URL
 
 const prisma = new PrismaClient({
   datasources: {
     db: {
-      url: 'file:./test.db'
-    }
-  }
+      url: databaseUrl,
+    },
+  },
 })
 
 beforeAll(async () => {
