@@ -427,7 +427,7 @@ export class OrderService {
       // Create audit event for payment type change
       await createOrderEvent(tx, {
         orderId,
-        eventType: 'PAYMENT_TYPE_CHANGED',
+        eventType: 'payment_type_changed',
         actorUserId,
         payload: {
           from: order.paymentType,

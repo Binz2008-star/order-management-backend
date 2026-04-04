@@ -6,6 +6,7 @@ import {
   calculateOrderTotal,
   generatePublicOrderNumber,
 } from "@/server/lib/utils";
+import { createOrderEvent } from "@/server/services/order-event.service";
 
 const createOrderSchema = z.object({
   customerName: z.string().min(1).max(120),
@@ -232,16 +233,15 @@ export async function POST(
         })),
       });
 
-      // Create order event
-      await tx.orderEvent.create({
-        data: {
-          orderId: order.id,
-          eventType: "ORDER_CREATED",
-          payloadJson: JSON.stringify({
-            source: "public_api",
-            customerPhone: body.customerPhone,
-            itemCount: body.items.length,
-          }),
+      // Create order event using centralized event authority
+      await createOrderEvent(tx, {
+        orderId: order.id,
+        actorUserId: null, // Public API - no actor
+        eventType: "order_created",
+        payload: {
+          source: "public_api",
+          customerPhone: body.customerPhone,
+          itemCount: body.items.length,
         },
       });
 
