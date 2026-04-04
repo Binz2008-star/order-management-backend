@@ -1,190 +1,144 @@
 import { PrismaClient } from '@prisma/client'
 import bcrypt from 'bcryptjs'
-import { calculateOrderTotal, generatePublicOrderNumber } from '../src/server/lib/utils'
-import { createOrderEvent } from '../src/server/services/order-event.service'
 
 const prisma = new PrismaClient()
 
 async function main() {
-  console.log('🌱 Seeding (idempotent)...')
+  try {
+    console.log('🌱 Starting production-safe seed...')
 
-  // 1. User
-  const user = await prisma.user.upsert({
-    where: { email: 'demo@seller.com' },
-    update: {},
-    create: {
-      email: 'demo@seller.com',
-      fullName: 'Demo Seller',
-      role: 'SELLER',
-      isActive: true,
-      passwordHash: await bcrypt.hash('demo123', 10),
-    },
-  })
+    // Precompute password hash
+    const passwordHash = await bcrypt.hash('demo123', 12)
 
-  // 2. Seller
-  const seller = await prisma.seller.upsert({
-    where: { slug: 'demo-store' },
-    update: {},
-    create: {
-      ownerUserId: user.id,
-      brandName: 'Demo Store',
-      slug: 'demo-store',
-      whatsappNumber: '+1234567890',
-      currency: 'USD',
-      status: 'ACTIVE',
-    },
-  })
-
-  // 3. Products (idempotent)
-  const productsData = [
-    { name: 'Classic T-Shirt', slug: 'classic-tshirt', priceMinor: 1999 },
-    { name: 'Denim Jeans', slug: 'denim-jeans', priceMinor: 4999 },
-    { name: 'Canvas Sneakers', slug: 'canvas-sneakers', priceMinor: 3499 },
-  ]
-
-  const products = []
-  for (const p of productsData) {
-    const product = await prisma.product.upsert({
-      where: {
-        sellerId_slug: { sellerId: seller.id, slug: p.slug },
-      },
-      update: {},
-      create: {
-        ...p,
-        sellerId: seller.id,
-        currency: 'USD',
-        stockQuantity: 50,
+    // 1. User
+    console.log('📝 Creating/upserting demo user...')
+    const user = await prisma.user.upsert({
+      where: { email: 'demo@seller.com' },
+      update: {
+        fullName: 'Demo Seller',
+        role: 'SELLER',
         isActive: true,
+        passwordHash,
+      },
+      create: {
+        email: 'demo@seller.com',
+        fullName: 'Demo Seller',
+        role: 'SELLER',
+        isActive: true,
+        passwordHash,
       },
     })
-    products.push(product)
-  }
+    console.log('✅ User created/upserted:', user.email)
 
-  // 4. Customer
-  const customer = await prisma.customer.upsert({
-    where: {
-      sellerId_phone: {
-        sellerId: seller.id,
-        phone: '+11234567890',
+    // 2. Seller
+    console.log('📝 Creating/upserting demo seller...')
+    const seller = await prisma.seller.upsert({
+      where: { slug: 'demo-store' },
+      update: {
+        ownerUserId: user.id,
+        brandName: 'Demo Store',
+        whatsappNumber: '+1234567890',
+        currency: 'USD',
+        status: 'ACTIVE',
       },
-    },
-    update: {},
-    create: {
-      sellerId: seller.id,
-      name: 'John Doe',
-      phone: '+11234567890',
-    },
-  })
+      create: {
+        ownerUserId: user.id,
+        brandName: 'Demo Store',
+        slug: 'demo-store',
+        whatsappNumber: '+1234567890',
+        currency: 'USD',
+        status: 'ACTIVE',
+      },
+    })
+    console.log('✅ Seller created/upserted:', seller.brandName)
 
-  // 5. Order (derived totals — no hardcoding)
-  const items = [
-    { product: products[0], quantity: 2 }, // 2 x T-Shirt = 3998
-    { product: products[1], quantity: 1 }, // 1 x Jeans = 4999
-  ]
+    // 3. Products - only after seller exists
+    console.log('📝 Creating/upserting products...')
+    const productsData = [
+      {
+        name: 'Classic T-Shirt',
+        slug: 'classic-tshirt',
+        description: 'Comfortable cotton t-shirt perfect for casual wear',
+        priceMinor: 1999,
+      },
+      {
+        name: 'Denim Jeans',
+        slug: 'denim-jeans',
+        description: 'Classic fit denim jeans with modern styling',
+        priceMinor: 4999,
+      },
+      {
+        name: 'Canvas Sneakers',
+        slug: 'canvas-sneakers',
+        description: 'Lightweight canvas sneakers for everyday comfort',
+        priceMinor: 3499,
+      },
+    ]
 
-  const totals = calculateOrderTotal(
-    items.map(i => ({
-      unitPriceMinor: i.product.priceMinor,
-      quantity: i.quantity,
-    })),
-    500 // delivery fee
-  )
+    const products = []
+    for (const p of productsData) {
+      // Use existing unique constraint @@unique([sellerId, slug])
+      const product = await prisma.product.upsert({
+        where: {
+          sellerId_slug: {
+            sellerId: seller.id,
+            slug: p.slug,
+          },
+        },
+        update: {
+          name: p.name,
+          description: p.description,
+          priceMinor: p.priceMinor,
+          currency: 'USD',
+          stockQuantity: 50,
+          isActive: true,
+        },
+        create: {
+          sellerId: seller.id,
+          name: p.name,
+          slug: p.slug,
+          description: p.description,
+          priceMinor: p.priceMinor,
+          currency: 'USD',
+          stockQuantity: 50,
+          isActive: true,
+        },
+      })
+      products.push(product)
+      console.log('✅ Product created/upserted:', product.name)
+    }
 
-  const order = await prisma.order.create({
-    data: {
-      sellerId: seller.id,
-      customerId: customer.id,
-      publicOrderNumber: generatePublicOrderNumber(),
-      ...totals,
-      currency: 'USD',
-      status: 'CONFIRMED',
-      paymentStatus: 'PENDING',
-      paymentType: 'CASH',
-      source: 'WEBSITE',
-    },
-  })
+    // 4. Customer - only after seller exists
+    console.log('📝 Creating/upserting customer...')
+    // Use existing unique constraint @@unique([sellerId, phone])
+    const customer = await prisma.customer.upsert({
+      where: {
+        sellerId_phone: {
+          sellerId: seller.id,
+          phone: '+11234567890',
+        },
+      },
+      update: {
+        name: 'John Doe',
+        addressText: '123 Main St, Demo City, DC 12345',
+      },
+      create: {
+        sellerId: seller.id,
+        name: 'John Doe',
+        phone: '+11234567890',
+        addressText: '123 Main St, Demo City, DC 12345',
+      },
+    })
+    console.log('✅ Customer created/upserted:', customer.name)
 
-  // 6. Order items
-  await prisma.orderItem.createMany({
-    data: items.map(i => ({
-      orderId: order.id,
-      productId: i.product.id,
-      productNameSnapshot: i.product.name,
-      unitPriceMinor: i.product.priceMinor,
-      quantity: i.quantity,
-      lineTotalMinor: i.product.priceMinor * i.quantity,
-    })),
-  })
+    console.log('🎉 Production-safe seed completed successfully!')
 
-  // 7. REQUIRED: Order event
-  await createOrderEvent(prisma, {
-    orderId: order.id,
-    eventType: 'ORDER_CREATED',
-    actorUserId: user.id,
-    payload: {
-      source: 'WEBSITE',
-      itemCount: items.length,
-    },
-  })
-
-  // 8. Create a second order for testing
-  const items2 = [
-    { product: products[2], quantity: 1 }, // 1 x Sneakers = 3499
-  ]
-
-  const totals2 = calculateOrderTotal(
-    items2.map(i => ({
-      unitPriceMinor: i.product.priceMinor,
-      quantity: i.quantity,
-    })),
-    300 // delivery fee
-  )
-
-  const order2 = await prisma.order.create({
-    data: {
-      sellerId: seller.id,
-      customerId: customer.id,
-      publicOrderNumber: generatePublicOrderNumber(),
-      ...totals2,
-      currency: 'USD',
-      status: 'PENDING',
-      paymentStatus: 'PENDING',
-      paymentType: 'CASH',
-      source: 'WEBSITE',
-    },
-  })
-
-  // 9. Order items for second order
-  await prisma.orderItem.createMany({
-    data: items2.map(i => ({
-      orderId: order2.id,
-      productId: i.product.id,
-      productNameSnapshot: i.product.name,
-      unitPriceMinor: i.product.priceMinor,
-      quantity: i.quantity,
-      lineTotalMinor: i.product.priceMinor * i.quantity,
-    })),
-  })
-
-  // 10. Order event for second order
-  await createOrderEvent(prisma, {
-    orderId: order2.id,
-    eventType: 'ORDER_CREATED',
-    actorUserId: user.id,
-    payload: {
-      source: 'WEBSITE',
-      itemCount: items2.length,
-    },
-  })
-
-  console.log('✅ Seed completed')
+  } catch (error) {
+    console.error('❌ Seed failed:', error)
+    process.exit(1)
+  } finally {
+    await prisma.$disconnect()
+  }
 }
 
 main()
-  .catch((e) => {
-    console.error('❌ Seed failed:', e)
-    process.exit(1)
-  })
-  .finally(async () => {
-    await prisma.$disconnect()
-  })
