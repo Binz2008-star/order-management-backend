@@ -154,9 +154,9 @@ Demo credentials:
 - Email: `demo@seller.com`
 - Password: `demo123`
 
-## 📊 Event Sourcing
+## 📊 Transactional Audit Events
 
-Every action creates immutable events:
+Key actions create audit events for traceability:
 
 - `order_created` - New order creation
 - `payment_initiated` - Payment started
@@ -164,9 +164,11 @@ Every action creates immutable events:
 - `status_changed` - Order status updates
 - `payment_failed` - Payment failures
 
+Events are written transactionally with the business actions they audit.
+
 ## 🧪 Testing
 
-Comprehensive test suite with Vitest:
+Test suite with Vitest covering critical flows:
 
 ```bash
 # Unit tests
@@ -175,8 +177,8 @@ npm run test:unit
 # Integration tests
 npm run test:integration
 
-# Full coverage
-npm run test:coverage
+# Full suite (103 tests passing)
+npm run test
 ```
 
 ## 🏗️ Database Schema
@@ -192,7 +194,7 @@ npm run test:coverage
 
 ## 🚨 Rate Limiting
 
-Redis-backed rate limiting with memory fallback. For production, prefer either:
+Rate limiting with memory fallback. For production, configure either:
 
 - `REDIS_URL` for a standard Redis connection
 - `UPSTASH_REDIS_REST_URL` + `UPSTASH_REDIS_REST_TOKEN` for Upstash on serverless
