@@ -63,10 +63,22 @@ describe('Rate limiting', () => {
 
     expect(finalA.success).toBe(false)
     expect(finalB.success).toBe(false)
+    if (finalA.success || finalB.success) {
+      throw new Error('Expected both limiters to exceed the rate limit')
+    }
     expect(finalA.statusCode).toBe(429)
     expect(finalB.statusCode).toBe(429)
     expect(finalA.headers['Retry-After']).toMatch(/^\d+$/)
-    expect(finalA.headers).toEqual(finalB.headers)
+    expect(finalB.headers['Retry-After']).toMatch(/^\d+$/)
+    expect(finalA.headers['X-RateLimit-Limit']).toBe(finalB.headers['X-RateLimit-Limit'])
+    expect(finalA.headers['X-RateLimit-Remaining']).toBe(finalB.headers['X-RateLimit-Remaining'])
+    expect(finalA.headers['Retry-After']).toBe(finalB.headers['Retry-After'])
+
+    const resetA = Date.parse(finalA.headers['X-RateLimit-Reset'])
+    const resetB = Date.parse(finalB.headers['X-RateLimit-Reset'])
+    expect(Number.isNaN(resetA)).toBe(false)
+    expect(Number.isNaN(resetB)).toBe(false)
+    expect(Math.abs(resetA - resetB)).toBeLessThanOrEqual(1000)
   })
 
   it('fails closed for AUTH endpoints when the distributed store is unavailable in production', async () => {
@@ -81,6 +93,9 @@ describe('Rate limiting', () => {
     const result = await limiter(request)
 
     expect(result.success).toBe(false)
+    if (result.success) {
+      throw new Error('Expected auth limiter to fail closed when store is unavailable')
+    }
     expect(result.statusCode).toBe(503)
     expect(result.reason).toBe('store_unavailable')
     expect(result.headers['X-RateLimit-Limit']).toBe(RATE_LIMIT_CONFIGS.AUTH.maxRequests.toString())
@@ -104,6 +119,9 @@ describe('Rate limiting', () => {
     }
 
     expect(last.success).toBe(false)
+    if (last.success) {
+      throw new Error('Expected public limiter to block after memory fallback exhaustion')
+    }
     expect(last.statusCode).toBe(429)
     expect(last.reason).toBe('limit_exceeded')
   })

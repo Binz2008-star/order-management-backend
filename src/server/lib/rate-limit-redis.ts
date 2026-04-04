@@ -50,12 +50,17 @@ interface UpstashResponse<T> {
   error?: string
 }
 
-interface RateLimitResponse {
-  success: boolean
-  headers: Record<string, string>
-  statusCode?: 429 | 503
-  reason?: 'limit_exceeded' | 'store_unavailable'
-}
+export type RateLimitResponse =
+  | {
+    success: true
+    headers: Record<string, string>
+  }
+  | {
+    success: false
+    headers: Record<string, string>
+    statusCode: 429 | 503
+    reason: 'limit_exceeded' | 'store_unavailable'
+  }
 
 function getClientIp(request: NextRequest): string {
   const forwardedFor = request.headers.get('x-forwarded-for')

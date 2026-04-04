@@ -1,6 +1,6 @@
 import { authenticateUser } from '@/server/lib/auth'
 import { ApiError } from '@/server/lib/errors'
-import { RATE_LIMIT_CONFIGS, createRateLimit } from '@/server/lib/rate-limit-service'
+import { RATE_LIMIT_CONFIGS, createRateLimit } from '@/server/lib/rate-limit'
 import { NextRequest, NextResponse } from 'next/server'
 import { z } from 'zod'
 
@@ -24,7 +24,7 @@ async function login(loginData: unknown, request: NextRequest) {
   console.log('📊 Rate limit result:', { success: rateLimitResult.success })
 
   if (!rateLimitResult.success) {
-    const statusCode = rateLimitResult.statusCode ?? 429
+    const statusCode = rateLimitResult.statusCode
     const message = statusCode === 503
       ? 'Rate limiting service unavailable'
       : 'Too many login attempts'
@@ -33,7 +33,7 @@ async function login(loginData: unknown, request: NextRequest) {
       { error: message },
       {
         status: statusCode,
-        headers: rateLimitResult.headers,
+        headers: new Headers(rateLimitResult.headers),
       }
     )
   }

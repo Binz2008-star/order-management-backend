@@ -4,12 +4,24 @@ import { MemoryRateLimitStore } from '../server/lib/rate-limit-memory'
 import { RateLimitService } from '../server/lib/rate-limit-service'
 import { RateLimitConfig } from '../server/lib/rate-limit-store'
 
+const env = process.env as {
+  NODE_ENV?: string
+  UPSTASH_REDIS_REST_URL?: string
+  UPSTASH_REDIS_REST_TOKEN?: string
+  REDIS_URL?: string
+}
+const originalNodeEnv = env.NODE_ENV
+
 describe('Rate Limiting - Header Contract Parity', () => {
   let memoryStore: MemoryRateLimitStore
   let service: RateLimitService
 
   beforeEach(() => {
     memoryStore = new MemoryRateLimitStore()
+    env.NODE_ENV = originalNodeEnv
+    delete env.REDIS_URL
+    delete env.UPSTASH_REDIS_REST_URL
+    delete env.UPSTASH_REDIS_REST_TOKEN
   })
 
   it('Memory and Upstash stores return identical headers', async () => {
@@ -78,9 +90,11 @@ describe('Production Failure Policies', () => {
       headers: { 'x-forwarded-for': '192.168.1.1' }
     }) as unknown as NextRequest
 
+    env.NODE_ENV = 'production'
+
     // Mock Redis failure by using invalid config
-    process.env.UPSTASH_REDIS_REST_URL = 'https://invalid-url'
-    process.env.UPSTASH_REDIS_REST_TOKEN = 'invalid-token'
+    env.UPSTASH_REDIS_REST_URL = 'https://invalid-url'
+    env.UPSTASH_REDIS_REST_TOKEN = 'invalid-token'
 
     const service = new RateLimitService(config)
 
@@ -99,9 +113,11 @@ describe('Production Failure Policies', () => {
       headers: { 'x-forwarded-for': '192.168.1.1' }
     }) as unknown as NextRequest
 
+    env.NODE_ENV = 'production'
+
     // Mock Redis failure
-    process.env.UPSTASH_REDIS_REST_URL = 'https://invalid-url'
-    process.env.UPSTASH_REDIS_REST_TOKEN = 'invalid-token'
+    env.UPSTASH_REDIS_REST_URL = 'https://invalid-url'
+    env.UPSTASH_REDIS_REST_TOKEN = 'invalid-token'
 
     const service = new RateLimitService(config)
 

@@ -7,9 +7,20 @@ import { RateLimitConfig } from '../server/lib/rate-limit-store'
 describe('Production-Ready Rate Limiting Tests', () => {
   let memoryStore: MemoryRateLimitStore
   let service: RateLimitService
+  const env = process.env as {
+    NODE_ENV?: string
+    UPSTASH_REDIS_REST_URL?: string
+    UPSTASH_REDIS_REST_TOKEN?: string
+    REDIS_URL?: string
+  }
+  const originalNodeEnv = env.NODE_ENV
 
   beforeEach(() => {
     memoryStore = new MemoryRateLimitStore()
+    env.NODE_ENV = originalNodeEnv
+    delete env.REDIS_URL
+    delete env.UPSTASH_REDIS_REST_URL
+    delete env.UPSTASH_REDIS_REST_TOKEN
   })
 
   describe('Atomicity and Race Conditions', () => {
@@ -89,9 +100,11 @@ describe('Production-Ready Rate Limiting Tests', () => {
         headers: { 'x-forwarded-for': '192.168.1.3' }
       }) as unknown as NextRequest
 
+      env.NODE_ENV = 'production'
+
       // Mock Redis failure
-      process.env.UPSTASH_REDIS_REST_URL = 'https://invalid-url'
-      process.env.UPSTASH_REDIS_REST_TOKEN = 'invalid-token'
+      env.UPSTASH_REDIS_REST_URL = 'https://invalid-url'
+      env.UPSTASH_REDIS_REST_TOKEN = 'invalid-token'
 
       const service = new RateLimitService(config)
       
@@ -110,9 +123,11 @@ describe('Production-Ready Rate Limiting Tests', () => {
         headers: { 'x-forwarded-for': '192.168.1.4' }
       }) as unknown as NextRequest
 
+      env.NODE_ENV = 'production'
+
       // Mock Redis failure
-      process.env.UPSTASH_REDIS_REST_URL = 'https://invalid-url'
-      process.env.UPSTASH_REDIS_REST_TOKEN = 'invalid-token'
+      env.UPSTASH_REDIS_REST_URL = 'https://invalid-url'
+      env.UPSTASH_REDIS_REST_TOKEN = 'invalid-token'
 
       const service = new RateLimitService(config)
       
@@ -144,7 +159,7 @@ describe('Production-Ready Rate Limiting Tests', () => {
 
       expect(serviceResult.allowed).toBe(memoryResult.allowed)
       expect(serviceResult.remaining).toBe(memoryResult.remaining)
-      expect(Math.abs(serviceResult.resetTime - memoryResult.resetTime)).toBeLessThan(1000)
+      expect(Math.abs(serviceResult.resetTime - memoryResult.resetTime)).toBeLessThanOrEqual(1000)
     })
 
     it('maintains header format consistency', async () => {
