@@ -99,9 +99,15 @@ describe('Transaction Timeout Error Handling', () => {
     })
 
     // Mock prisma.$transaction to verify timeout parameter
-    const capturedOptions: any[] = []
+    interface TransactionOptions {
+      timeout?: number
+      maxWait?: number
+      isolationLevel?: string
+    }
 
-    const spy = vi.spyOn(prisma, '$transaction').mockImplementation((callback: any, options: any) => {
+    const capturedOptions: TransactionOptions[] = []
+
+    const spy = vi.spyOn(prisma, '$transaction').mockImplementation((callback: (tx: unknown) => Promise<unknown>, options: TransactionOptions) => {
       capturedOptions.push(options)
       // Create a simple mock transaction that just calls the callback with a mock tx
       const mockTx = {
