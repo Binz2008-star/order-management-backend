@@ -75,7 +75,7 @@ describe('API Flow Integration Tests', () => {
       },
     })
 
-    const customer = await prisma.customer.upsert({
+    await prisma.customer.upsert({
       where: {
         sellerId_phone: {
           sellerId: seller.id,
@@ -140,7 +140,7 @@ describe('API Flow Integration Tests', () => {
     expect(productId).toBeDefined()
 
     // Recreate customer since it's deleted in beforeEach
-    const customer = await prisma.customer.create({
+    await prisma.customer.create({
       data: {
         sellerId,
         name: 'Test Customer',
@@ -195,7 +195,7 @@ describe('API Flow Integration Tests', () => {
     expect(authToken).toBeDefined()
 
     // Create a new order for this test since previous one was deleted
-    const customer = await prisma.customer.create({
+    await prisma.customer.create({
       data: {
         sellerId,
         name: 'Test Customer 2',
@@ -241,7 +241,7 @@ describe('API Flow Integration Tests', () => {
     expect(authToken).toBeDefined()
 
     // Create a new order for this test since previous one was deleted
-    const customer = await prisma.customer.create({
+    await prisma.customer.create({
       data: {
         sellerId,
         name: 'Test Customer 3',
@@ -287,7 +287,7 @@ describe('API Flow Integration Tests', () => {
     expect(authToken).toBeDefined()
 
     // Create a new order for this test since previous one was deleted
-    const customer = await prisma.customer.create({
+    await prisma.customer.create({
       data: {
         sellerId,
         name: 'Test Customer 4',
@@ -348,7 +348,7 @@ describe('API Flow Integration Tests', () => {
     expect(authToken).toBeDefined()
 
     // Create a new order for this test since previous one was deleted
-    const customer = await prisma.customer.create({
+    await prisma.customer.create({
       data: {
         sellerId,
         name: 'Test Customer 5',
