@@ -107,8 +107,8 @@ describe('Transaction Timeout Error Handling', () => {
 
     const capturedOptions: TransactionOptions[] = []
 
-    const spy = vi.spyOn(prisma, '$transaction').mockImplementation((callback: (tx: unknown) => Promise<unknown>, options: TransactionOptions) => {
-      capturedOptions.push(options)
+    const spy = vi.spyOn(prisma, '$transaction').mockImplementation((callback: (tx: any) => Promise<unknown>, options?: TransactionOptions) => { // eslint-disable-line @typescript-eslint/no-explicit-any
+      capturedOptions.push(options!)
       // Create a simple mock transaction that just calls the callback with a mock tx
       const mockTx = {
         product: {
