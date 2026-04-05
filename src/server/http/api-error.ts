@@ -35,6 +35,25 @@ export function toApiError(error: unknown): ApiError {
     return new ApiError(400, 'Validation failed', 'VALIDATION_ERROR', formatZodError(error))
   }
 
+  // Handle Prisma transaction timeout errors
+  if (error instanceof Error) {
+    const errorMessage = error.message.toLowerCase()
+    if (
+      errorMessage.includes('transaction') &&
+      errorMessage.includes('timeout')
+    ) {
+      return new ApiError(503, 'Transaction timeout', 'TRANSACTION_TIMEOUT')
+    }
+
+    // Handle other Prisma known request errors
+    if (
+      errorMessage.includes('prisma') &&
+      (errorMessage.includes('known request') || errorMessage.includes('connection'))
+    ) {
+      return new ApiError(503, 'Database temporarily unavailable', 'DATABASE_UNAVAILABLE')
+    }
+  }
+
   return new ApiError(500, 'Internal server error', 'INTERNAL_ERROR')
 }
 

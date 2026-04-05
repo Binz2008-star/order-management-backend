@@ -246,7 +246,7 @@ export async function POST(
       });
 
       return { order, customer };
-    });
+    }, { timeout: 15000, maxWait: 5000 });
 
     // Fetch the complete order with items
     const orderWithItems = await prisma.order.findUnique({

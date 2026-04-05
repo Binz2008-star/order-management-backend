@@ -142,7 +142,7 @@ export class OrderService {
       })
 
       return order
-    })
+    }, { timeout: 15000, maxWait: 5000 })
   }
 
   /**
@@ -230,7 +230,7 @@ export class OrderService {
       })
 
       return updatedOrder
-    })
+    }, { timeout: 15000 })
   }
 
   private async generateOrderNumber(tx: Prisma.TransactionClient, sellerId: string): Promise<string> {
@@ -437,7 +437,7 @@ export class OrderService {
       })
 
       return updatedOrder
-    })
+    }, { timeout: 15000 })
   }
 }
 
