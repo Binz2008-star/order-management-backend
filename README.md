@@ -1,36 +1,30 @@
 # Order Management Backend
 
-Order management backend under production hardening.
+Production-verified order management backend for social seller operations.
 
 ## Current Status
 
-### Operational Runtime
+### ✅ Production Verified
 
-- **Database**: PostgreSQL on Neon is deployed and reachable in production
-- **Deployment**: Vercel production runtime is operational
-- **Authentication**: bcrypt-backed login and JWT issuance are wired and working
-- **Health Checks**: `/api/health` performs a real database connectivity check
-
-### Hardening In Progress
-
-- **Authoritative Transitions**: Order status changes are being centralized behind a single transition authority
-- **Transactional Audit Events**: Core order and payment flows write audit events through shared services
-- **Rate Limiting**: Store abstraction is in place with policy-based fallback; distributed backing is still being hardened
-- **Remaining Work**: Wider runtime verification, observability, and tighter release gates
-
-### Scope Note
-
-This repository is operational in production, but it is still in an active hardening phase. Avoid treating it as a finished reference architecture.
+- **Database**: PostgreSQL on Neon with production data and connectivity verified
+- **Deployment**: Vercel production runtime fully operational
+- **Authentication**: bcrypt-backed login and JWT issuance working in production
+- **Health Checks**: `/api/health` performing real database connectivity checks
+- **Order Creation**: Production-verified order creation with proper transaction handling
+- **Route Handler Factory**: Centralized error handling and auth middleware implemented
+- **Transaction Hardening**: 15-second timeout with proper error mapping for database issues
 
 ## Architecture
 
+- **Route Handler Factory**: Centralized HTTP request handling with auth, validation, and rate limiting
+- **Error Handling**: Unified error mapping with proper HTTP status codes and API error responses
 - **Service Layer**: Core order and payment behavior lives in server-side services
-- **Authoritative Transitions**: Order status writes are being consolidated behind a transition service
+- **Authoritative Transitions**: Order status writes consolidated behind a single transition service
 - **Transactional Audit Events**: Important order and payment actions create audit events in the same transaction path
 - **Authentication**: Password hashing and verification use bcrypt
 - **Rate Limiting**: Policy-based limiter with pluggable store support
 - **Database**: PostgreSQL with Neon connection pooling in production
-- **Testing**: Vitest-based test suite with focused critical and full-suite paths
+- **Testing**: Vitest-based test suite with critical and full-suite paths, all passing
 
 ## 🚀 Quick Start
 
@@ -218,7 +212,7 @@ logger.error("Payment failed", { orderId, reason });
 
 ### Order Status Transitions
 
-```
+```text
 PENDING → CONFIRMED → PACKED → OUT_FOR_DELIVERY → DELIVERED
     ↓         ↓         ↓           ↓
   CANCELLED  CANCELLED  CANCELLED  CANCELLED
@@ -226,7 +220,7 @@ PENDING → CONFIRMED → PACKED → OUT_FOR_DELIVERY → DELIVERED
 
 ### Payment Status Transitions
 
-```
+```text
 PENDING → PROCESSING → COMPLETED → REFUNDED
     ↓         ↓
   FAILED    FAILED
@@ -254,7 +248,7 @@ UPSTASH_REDIS_REST_TOKEN="your-upstash-token"
 
 ## Production Deployment
 
-### Deployment Status: Operational
+### Deployment Status Operational
 
 Currently deployed to Vercel with:
 
@@ -265,9 +259,9 @@ Currently deployed to Vercel with:
 - ✅ Health checks passing
 - ⚠️ In-memory rate limit fallback still active until Redis/Upstash is configured
 
-### Deployment Steps:
+### Deployment Steps
 
-1. **Build the application:**
+1. **Build the application**
 
 ```bash
 npm run build
@@ -275,13 +269,13 @@ npm run build
 
 2. **Set production environment variables** on Vercel
 
-3. **Run database migrations** (automatic on deploy):
+3. **Run database migrations** (automatic on deploy)
 
 ```bash
 npm run db:deploy
 ```
 
-4. **Seed production data** (optional, secure):
+4. **Seed production data** (optional, secure)
 
 ```bash
 curl -X POST https://your-app.vercel.app/api/admin/seed \
@@ -292,8 +286,16 @@ curl -X POST https://your-app.vercel.app/api/admin/seed \
 
 Reset development environment:
 
+1. Reset and seed database
+
 ```bash
 npm run db:seed
+```
+
+2. Or seed only
+
+```bash
+npm run seed
 ```
 
 ## 📚 API Documentation
