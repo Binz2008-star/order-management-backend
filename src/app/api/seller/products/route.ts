@@ -1,22 +1,53 @@
 import { prisma } from '@/server/db/prisma'
-import { getCurrentUser, requireSeller } from '@/server/lib/auth'
-import { ApiError, withQueryValidation, withValidation } from '@/server/lib/errors'
-import { CreateProductSchema, PaginationSchema } from '@/server/lib/validation'
-import { NextRequest, NextResponse } from 'next/server'
-import type { z } from 'zod'
+import { ApiError } from '@/server/http/api-error'
+import { createRouteHandler } from '@/server/http/route'
+import { type SellerAuthUser } from '@/server/lib/auth'
+import { RATE_LIMIT_CONFIGS } from '@/server/lib/rate-limit'
+import {
+  CreateProductSchema,
+  PaginationSchema,
+  type CreateProductInput,
+  type PaginationInput,
+} from '@/server/lib/validation'
 
-type PaginationQuery = z.infer<typeof PaginationSchema>
-type CreateProductData = z.infer<typeof CreateProductSchema>
+function serializeProduct(product: {
+  id: string
+  name: string
+  slug: string
+  description: string | null
+  priceMinor: number
+  currency: string
+  stockQuantity: number
+  isActive: boolean
+  createdAt: Date
+  updatedAt: Date
+}) {
+  return {
+    id: product.id,
+    name: product.name,
+    slug: product.slug,
+    description: product.description,
+    priceMinor: product.priceMinor,
+    currency: product.currency,
+    stockQuantity: product.stockQuantity,
+    isActive: product.isActive,
+    createdAt: product.createdAt,
+    updatedAt: product.updatedAt,
+  }
+}
 
-async function getProducts(query: PaginationQuery, request: NextRequest) {
-  const user = await getCurrentUser(request)
-  requireSeller(user)
-
+async function getProducts({
+  query,
+  user,
+}: {
+  query: PaginationInput
+  user: { sellerId: string }
+}) {
   const { page, limit } = query
   const skip = (page - 1) * limit
 
   const where = {
-    sellerId: user.sellerId!,
+    sellerId: user.sellerId,
   }
 
   const [products, total] = await Promise.all([
@@ -33,75 +64,67 @@ async function getProducts(query: PaginationQuery, request: NextRequest) {
 
   const totalPages = Math.ceil(total / limit)
 
-  return NextResponse.json({
-    products: products.map(product => ({
-      id: product.id,
-      name: product.name,
-      slug: product.slug,
-      description: product.description,
-      priceMinor: product.priceMinor,
-      currency: product.currency,
-      stockQuantity: product.stockQuantity,
-      isActive: product.isActive,
-      createdAt: product.createdAt,
-      updatedAt: product.updatedAt,
-    })),
-    pagination: {
-      page,
-      limit,
-      total,
-      totalPages,
-      hasNext: page < totalPages,
-      hasPrev: page > 1,
+  return {
+    body: {
+      products: products.map(serializeProduct),
+      pagination: {
+        page,
+        limit,
+        total,
+        totalPages,
+        hasNext: page < totalPages,
+        hasPrev: page > 1,
+      },
     },
-  })
+  }
 }
 
-async function createProduct(productData: CreateProductData, request: NextRequest) {
-  const user = await getCurrentUser(request)
-  requireSeller(user)
-
+async function createProduct({
+  body,
+  user,
+}: {
+  body: CreateProductInput
+  user: { sellerId: string }
+}) {
   // Check if slug is unique for this seller
   const existingProduct = await prisma.product.findUnique({
     where: {
       sellerId_slug: {
-        sellerId: user.sellerId!,
-        slug: productData.slug,
+        sellerId: user.sellerId,
+        slug: body.slug,
       },
     },
   })
 
   if (existingProduct) {
-    throw new ApiError(400, 'Product with this slug already exists')
+    throw new ApiError(409, 'Product with this slug already exists', 'PRODUCT_SLUG_CONFLICT')
   }
 
   const product = await prisma.product.create({
     data: {
-      ...productData,
-      sellerId: user.sellerId!,
+      ...body,
+      sellerId: user.sellerId,
     },
   })
 
-  return NextResponse.json({
-    product: {
-      id: product.id,
-      name: product.name,
-      slug: product.slug,
-      description: product.description,
-      priceMinor: product.priceMinor,
-      currency: product.currency,
-      stockQuantity: product.stockQuantity,
-      isActive: product.isActive,
-      createdAt: product.createdAt,
-      updatedAt: product.updatedAt,
+  return {
+    status: 201,
+    body: {
+      product: serializeProduct(product),
     },
-  }, { status: 201 })
+  }
 }
 
-export const GET = withQueryValidation(PaginationSchema, (data, request) =>
-  getProducts(data, request)
-)
+export const GET = createRouteHandler<undefined, PaginationInput, undefined, SellerAuthUser>({
+  auth: 'seller',
+  querySchema: PaginationSchema,
+  rateLimit: RATE_LIMIT_CONFIGS.SELLER_API,
+  handler: getProducts,
+})
 
-export const POST = withValidation(CreateProductSchema, (data, request) =>
-  createProduct(data, request)
-)
+export const POST = createRouteHandler<CreateProductInput, undefined, undefined, SellerAuthUser>({
+  auth: 'seller',
+  bodySchema: CreateProductSchema,
+  rateLimit: RATE_LIMIT_CONFIGS.SELLER_API,
+  handler: createProduct,
+})

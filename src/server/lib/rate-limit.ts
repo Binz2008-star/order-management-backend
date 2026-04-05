@@ -9,6 +9,7 @@ export type {
   RateLimitCheckResult,
   RateLimitConfig,
   RateLimitFailurePolicy,
+  RateLimitResponse,
   RateLimitStore,
   RateLimitStoreStats,
 } from './rate-limit-redis'

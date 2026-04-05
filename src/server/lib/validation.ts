@@ -31,6 +31,11 @@ const orderItemSchema = z.object({
   quantity: z.coerce.number().int('Quantity must be an integer').min(1, 'Quantity must be at least 1'),
 })
 
+export const LoginSchema = z.object({
+  email: z.string().trim().email('Invalid email'),
+  password: normalizedString('Password'),
+})
+
 export const CreateOrderSchema = z.object({
   customerName: normalizedString('Customer name').max(120, 'Customer name is too long'),
   customerPhone: phoneSchema,
@@ -117,3 +122,4 @@ export type SellerSlugInput = z.infer<typeof SellerSlugSchema>
 export type IdInput = z.infer<typeof IdSchema>
 export type PaymentAttemptIdInput = z.infer<typeof PaymentAttemptIdSchema>
 export type PaginationInput = z.infer<typeof PaginationSchema>
+export type LoginInput = z.infer<typeof LoginSchema>

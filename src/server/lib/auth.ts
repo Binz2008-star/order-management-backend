@@ -2,7 +2,7 @@ import bcrypt from 'bcryptjs'
 import jwt, { JwtPayload, SignOptions } from 'jsonwebtoken'
 import { NextRequest } from 'next/server'
 import { prisma } from '../db/prisma'
-import { ApiError } from './errors'
+import { ApiError } from '@/server/http/api-error'
 
 const JWT_EXPIRES_IN: SignOptions['expiresIn'] = '7d'
 
@@ -27,12 +27,12 @@ interface TokenPayload extends JwtPayload {
   sellerId: string | null
 }
 
-interface SellerAuthUser extends AuthUser {
+export interface SellerAuthUser extends AuthUser {
   sellerId: string
   role: 'SELLER' | 'ADMIN'
 }
 
-interface AdminAuthUser extends AuthUser {
+export interface AdminAuthUser extends AuthUser {
   role: 'ADMIN'
 }
 
@@ -40,7 +40,7 @@ function getJwtSecret(): string {
   const secret = process.env.JWT_SECRET
 
   if (!secret || secret.trim() === '') {
-    throw new Error('JWT_SECRET environment variable is required')
+    throw new ApiError(500, 'Authentication configuration error', 'AUTH_CONFIG_ERROR')
   }
 
   return secret
@@ -98,8 +98,10 @@ export function generateToken(user: AuthUser): string {
 }
 
 export function verifyToken(token: string): AuthUser {
+  const jwtSecret = getJwtSecret()
+
   try {
-    const decoded = jwt.verify(token, getJwtSecret())
+    const decoded = jwt.verify(token, jwtSecret)
     const payload = normalizeTokenPayload(decoded)
 
     return {
@@ -108,7 +110,11 @@ export function verifyToken(token: string): AuthUser {
       role: payload.role,
       sellerId: payload.sellerId,
     }
-  } catch {
+  } catch (error) {
+    if (error instanceof ApiError) {
+      throw error
+    }
+
     throw new ApiError(401, 'Invalid token')
   }
 }
@@ -149,8 +155,12 @@ export async function authenticateUser(
       token: generateToken(authUser),
     }
   } catch (error) {
-    console.error('Database authentication failed:', error)
-    throw new ApiError(401, 'Invalid credentials')
+    if (error instanceof ApiError) {
+      throw error
+    }
+
+    console.error('Authentication service failed:', error)
+    throw new ApiError(500, 'Authentication service unavailable', 'AUTH_SERVICE_UNAVAILABLE')
   }
 }
 
