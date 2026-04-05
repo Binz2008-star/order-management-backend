@@ -1,6 +1,13 @@
 /// <reference types="vitest" />
+import { resolve } from 'node:path'
+import { defineConfig } from 'vitest/config'
 
-export default {
+export default defineConfig({
+  resolve: {
+    alias: {
+      '@': resolve(__dirname, 'src'),
+    },
+  },
   test: {
     globals: true,
     environment: 'node',
@@ -9,4 +16,4 @@ export default {
     fileParallelism: false, // Run tests sequentially for proper DB isolation
     testTimeout: 20000,
   },
-}
+})

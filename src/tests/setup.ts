@@ -15,8 +15,30 @@ vi.mock('next/server', () => ({
     headers: Headers
     body: unknown
     ip = '127.0.0.1'
-    json = () => Promise.resolve(this.body)
-    text = () => Promise.resolve(this.body)
+    json = async () => {
+      if (typeof this.body === 'string') {
+        return JSON.parse(this.body)
+      }
+
+      if (this.body instanceof ArrayBuffer) {
+        return JSON.parse(Buffer.from(this.body).toString('utf8'))
+      }
+
+      return this.body
+    }
+    text = async () => {
+      if (typeof this.body === 'string') {
+        return this.body
+      }
+
+      if (this.body instanceof ArrayBuffer) {
+        return Buffer.from(this.body).toString('utf8')
+      }
+
+      return this.body === undefined || this.body === null
+        ? ''
+        : String(this.body)
+    }
   },
   NextResponse: {
     json: (data: unknown, init?: ResponseInit) => ({

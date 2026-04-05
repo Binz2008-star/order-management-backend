@@ -1,12 +1,47 @@
 import { beforeAll, describe, expect, it } from 'vitest'
+import { POST as loginRoute } from '../app/api/auth/login/route'
+import { GET as getSellerOrderRoute } from '../app/api/seller/orders/[id]/route'
+import { GET as getSellerOrdersRoute } from '../app/api/seller/orders/route'
 import { hashPassword } from '../server/lib/auth'
 import { prisma } from './setup'
+import { invokeRoute } from './helpers/route-invocation'
 
 describe('Authorization API Tests', () => {
   let sellerAToken: string
   let sellerBToken: string
   let sellerAId: string
   let sellerBId: string
+
+  async function login(email: string, password: string) {
+    return invokeRoute<{
+      token?: string
+      user?: {
+        email: string
+        role: string
+        sellerId?: string
+      }
+      error?: string
+    }>(loginRoute, {
+      url: 'http://test.local/api/auth/login',
+      method: 'POST',
+      body: { email, password },
+    })
+  }
+
+  async function getSellerOrders(token?: string) {
+    return invokeRoute<{ orders?: Array<{ id: string }>; error?: string }>(getSellerOrdersRoute, {
+      url: 'http://test.local/api/seller/orders',
+      headers: token ? { Authorization: `Bearer ${token}` } : undefined,
+    })
+  }
+
+  async function getSellerOrder(id: string, authorization?: string) {
+    return invokeRoute<{ order?: { id: string }; error?: string }, { id: string }>(getSellerOrderRoute, {
+      url: `http://test.local/api/seller/orders/${id}`,
+      headers: authorization ? { Authorization: authorization } : undefined,
+      params: { id },
+    })
+  }
 
   beforeAll(async () => {
     // Clean up
@@ -61,58 +96,35 @@ describe('Authorization API Tests', () => {
     })
 
     // Get tokens
-    const authAResponse = await fetch('http://localhost:3000/api/auth/login', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        email: userA.email,
-        password: 'password123'
-      })
-    })
-    const authA = await authAResponse.json()
-    sellerAToken = authA.token
+    const authAResponse = await login(userA.email, 'password123')
+    sellerAToken = authAResponse.body.token!
 
-    const authBResponse = await fetch('http://localhost:3000/api/auth/login', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        email: userB.email,
-        password: 'password123'
-      })
-    })
-    const authB = await authBResponse.json()
-    sellerBToken = authB.token
+    const authBResponse = await login(userB.email, 'password123')
+    sellerBToken = authBResponse.body.token!
 
     sellerAId = sellerA.id
     sellerBId = sellerB.id
   })
 
   it('should reject missing bearer token on seller routes', async () => {
-    const response = await fetch('http://localhost:3000/api/seller/orders')
+    const response = await getSellerOrders()
 
     expect(response.status).toBe(401)
-    const data = await response.json()
-    expect(data.error).toBeDefined()
+    expect(response.body.error).toBeDefined()
   })
 
   it('should reject invalid token', async () => {
-    const response = await fetch('http://localhost:3000/api/seller/orders', {
-      headers: { 'Authorization': 'Bearer invalid-token' }
-    })
+    const response = await getSellerOrders('invalid-token')
 
     expect(response.status).toBe(401)
-    const data = await response.json()
-    expect(data.error).toBeDefined()
+    expect(response.body.error).toBeDefined()
   })
 
   it('should reject token without Bearer prefix', async () => {
-    const response = await fetch('http://localhost:3000/api/seller/orders', {
-      headers: { 'Authorization': sellerAToken }
-    })
+    const response = await getSellerOrder(sellerAId, sellerAToken)
 
     expect(response.status).toBe(401)
-    const data = await response.json()
-    expect(data.error).toBeDefined()
+    expect(response.body.error).toBeDefined()
   })
 
   it('should reject wrong seller accessing another seller order', async () => {
@@ -141,13 +153,10 @@ describe('Authorization API Tests', () => {
     })
 
     // Seller A trying to access Seller B's order
-    const response = await fetch(`http://localhost:3000/api/seller/orders/${orderB.id}`, {
-      headers: { 'Authorization': `Bearer ${sellerAToken}` }
-    })
+    const response = await getSellerOrder(orderB.id, `Bearer ${sellerAToken}`)
 
     expect(response.status).toBe(404)
-    const data = await response.json()
-    expect(data.error).toBeDefined()
+    expect(response.body.error).toBeDefined()
   })
 
   it('should allow seller to access own order', async () => {
@@ -175,14 +184,11 @@ describe('Authorization API Tests', () => {
       },
     })
 
-    const response = await fetch(`http://localhost:3000/api/seller/orders/${orderA.id}`, {
-      headers: { 'Authorization': `Bearer ${sellerAToken}` }
-    })
+    const response = await getSellerOrder(orderA.id, `Bearer ${sellerAToken}`)
 
     expect(response.status).toBe(200)
-    const data = await response.json()
-    expect(data.order).toBeDefined()
-    expect(data.order.id).toBe(orderA.id)
+    expect(response.body.order).toBeDefined()
+    expect(response.body.order?.id).toBe(orderA.id)
   })
 
   it('should isolate seller orders lists', async () => {
@@ -234,23 +240,17 @@ describe('Authorization API Tests', () => {
     })
 
     // Seller A's orders list
-    const responseA = await fetch('http://localhost:3000/api/seller/orders', {
-      headers: { 'Authorization': `Bearer ${sellerAToken}` }
-    })
+    const responseA = await getSellerOrders(sellerAToken)
 
     expect(responseA.status).toBe(200)
-    const dataA = await responseA.json()
-    expect(dataA.orders).toHaveLength(1)
-    expect(dataA.orders[0].id).toBe(orderA.id)
+    expect(responseA.body.orders).toHaveLength(1)
+    expect(responseA.body.orders?.[0].id).toBe(orderA.id)
 
     // Seller B's orders list
-    const responseB = await fetch('http://localhost:3000/api/seller/orders', {
-      headers: { 'Authorization': `Bearer ${sellerBToken}` }
-    })
+    const responseB = await getSellerOrders(sellerBToken)
 
     expect(responseB.status).toBe(200)
-    const dataB = await responseB.json()
-    expect(dataB.orders).toHaveLength(1)
-    expect(dataB.orders[0].id).toBe(orderB.id)
+    expect(responseB.body.orders).toHaveLength(1)
+    expect(responseB.body.orders?.[0].id).toBe(orderB.id)
   })
 })

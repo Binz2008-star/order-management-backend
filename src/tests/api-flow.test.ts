@@ -1,12 +1,112 @@
 import bcrypt from 'bcryptjs'
 import { beforeAll, describe, expect, it } from 'vitest'
+import { POST as loginRoute } from '../app/api/auth/login/route'
+import { POST as createPublicOrderRoute } from '../app/api/public/[sellerSlug]/orders/route'
+import { GET as getPublicProductsRoute } from '../app/api/public/[sellerSlug]/products/route'
+import { GET as getSellerOrderRoute } from '../app/api/seller/orders/[id]/route'
+import { PATCH as updateSellerOrderStatusRoute } from '../app/api/seller/orders/[id]/status/route'
+import { GET as getSellerOrdersRoute } from '../app/api/seller/orders/route'
 import { prisma } from './setup'
+import { invokeRoute } from './helpers/route-invocation'
 
 describe('API Flow Integration Tests', () => {
   let authToken: string
   let sellerId: string
   let orderId: string
   let productId: string
+  const sellerSlug = 'demo-store'
+
+  async function getPublicProducts() {
+    return invokeRoute<{
+      seller: { slug: string }
+      products: Array<{ id: string }>
+    }, { sellerSlug: string }>(getPublicProductsRoute, {
+      url: `http://test.local/api/public/${sellerSlug}/products`,
+      params: { sellerSlug },
+    })
+  }
+
+  async function login(email: string, password: string) {
+    return invokeRoute<{
+      token?: string
+      user?: {
+        email: string
+        role: string
+        sellerId?: string
+      }
+      error?: string
+    }>(loginRoute, {
+      url: 'http://test.local/api/auth/login',
+      method: 'POST',
+      body: {
+        email,
+        password,
+      },
+    })
+  }
+
+  async function createPublicOrder(input: {
+    customerName: string
+    customerPhone: string
+    addressText: string
+    items: Array<{ productId: string; quantity: number }>
+    deliveryFee: number
+    paymentType: string
+  }) {
+    return invokeRoute<{
+      id: string
+      publicOrderNumber: string
+      status: string
+      items: Array<{ id: string }>
+    }, { sellerSlug: string }>(createPublicOrderRoute, {
+      url: `http://test.local/api/public/${sellerSlug}/orders`,
+      method: 'POST',
+      params: { sellerSlug },
+      body: input,
+    })
+  }
+
+  async function getSellerOrders(token: string) {
+    return invokeRoute<{ orders: Array<{ id: string; publicOrderNumber: string; status: string }> }>(
+      getSellerOrdersRoute,
+      {
+        url: 'http://test.local/api/seller/orders',
+        headers: { Authorization: `Bearer ${token}` },
+      }
+    )
+  }
+
+  async function getSellerOrder(token: string, id: string) {
+    return invokeRoute<{
+      order: {
+        id: string
+        orderItems: Array<{ id: string }>
+        events: Array<{ id: string }>
+      }
+    }, { id: string }>(getSellerOrderRoute, {
+      url: `http://test.local/api/seller/orders/${id}`,
+      headers: { Authorization: `Bearer ${token}` },
+      params: { id },
+    })
+  }
+
+  async function updateSellerOrderStatus(token: string, id: string, status: string, reason: string) {
+    return invokeRoute<{ order?: { status: string }; error?: string }, { id: string }>(
+      updateSellerOrderStatusRoute,
+      {
+        url: `http://test.local/api/seller/orders/${id}/status`,
+        method: 'PATCH',
+        headers: {
+          Authorization: `Bearer ${token}`,
+        },
+        params: { id },
+        body: {
+          status,
+          reason,
+        },
+      }
+    )
+  }
 
   beforeAll(async () => {
     // Create seed data for tests
@@ -99,41 +199,31 @@ describe('API Flow Integration Tests', () => {
   })
 
   it('should return 200 and non-empty array for public products', async () => {
-    const response = await fetch('http://localhost:3000/api/public/demo-store/products')
-    const data = await response.json()
+    const response = await getPublicProducts()
 
     expect(response.status).toBe(200)
-    expect(data.products).toBeDefined()
-    expect(Array.isArray(data.products)).toBe(true)
-    expect(data.products.length).toBeGreaterThan(0)
-    expect(data.seller).toBeDefined()
-    expect(data.seller.slug).toBe('demo-store')
+    expect(response.body.products).toBeDefined()
+    expect(Array.isArray(response.body.products)).toBe(true)
+    expect(response.body.products.length).toBeGreaterThan(0)
+    expect(response.body.seller).toBeDefined()
+    expect(response.body.seller.slug).toBe('demo-store')
 
     // Store product ID for later tests
-    productId = data.products[0].id
+    productId = response.body.products[0].id
   })
 
   it('should return token for demo user login', async () => {
-    const response = await fetch('http://localhost:3000/api/auth/login', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        email: 'demo@seller.com',
-        password: 'demo123'
-      })
-    })
-
-    const data = await response.json()
+    const response = await login('demo@seller.com', 'demo123')
 
     expect(response.status).toBe(200)
-    expect(data.token).toBeDefined()
-    expect(data.user).toBeDefined()
-    expect(data.user.email).toBe('demo@seller.com')
-    expect(data.user.role).toBe('SELLER')
-    expect(data.user.sellerId).toBeDefined()
+    expect(response.body.token).toBeDefined()
+    expect(response.body.user).toBeDefined()
+    expect(response.body.user?.email).toBe('demo@seller.com')
+    expect(response.body.user?.role).toBe('SELLER')
+    expect(response.body.user?.sellerId).toBeDefined()
 
-    authToken = data.token
-    sellerId = data.user.sellerId
+    authToken = response.body.token!
+    sellerId = response.body.user!.sellerId!
   })
 
   it('should create public order and return 201 with order ID', async () => {
@@ -149,30 +239,24 @@ describe('API Flow Integration Tests', () => {
       },
     })
 
-    const response = await fetch('http://localhost:3000/api/public/demo-store/orders', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        customerName: 'Test Customer',
-        customerPhone: '+1234567890',
-        addressText: '123 Test St',
-        items: [{ productId, quantity: 2 }],
-        deliveryFee: 500,
-        paymentType: 'CASH_ON_DELIVERY'
-      })
+    const response = await createPublicOrder({
+      customerName: 'Test Customer',
+      customerPhone: '+1234567890',
+      addressText: '123 Test St',
+      items: [{ productId, quantity: 2 }],
+      deliveryFee: 500,
+      paymentType: 'CASH_ON_DELIVERY',
     })
 
-    const data = await response.json()
-
     expect(response.status).toBe(201)
-    expect(data.id).toBeDefined()
-    expect(data.publicOrderNumber).toBeDefined()
-    expect(data.status).toBe('PENDING')
-    expect(data.items).toBeDefined()
-    expect(Array.isArray(data.items)).toBe(true)
-    expect(data.items.length).toBe(1)
+    expect(response.body.id).toBeDefined()
+    expect(response.body.publicOrderNumber).toBeDefined()
+    expect(response.body.status).toBe('PENDING')
+    expect(response.body.items).toBeDefined()
+    expect(Array.isArray(response.body.items)).toBe(true)
+    expect(response.body.items.length).toBe(1)
 
-    orderId = data.id
+    orderId = response.body.id
 
     // Verify DB state
     const orderCount = await prisma.order.count()
@@ -204,34 +288,24 @@ describe('API Flow Integration Tests', () => {
       },
     })
 
-    const orderResponse = await fetch('http://localhost:3000/api/public/demo-store/orders', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        customerName: 'Test Customer 2',
-        customerPhone: '+1234567891',
-        addressText: '124 Test St',
-        items: [{ productId, quantity: 1 }],
-        deliveryFee: 0,
-        paymentType: 'CASH_ON_DELIVERY'
-      })
+    const orderResponse = await createPublicOrder({
+      customerName: 'Test Customer 2',
+      customerPhone: '+1234567891',
+      addressText: '124 Test St',
+      items: [{ productId, quantity: 1 }],
+      deliveryFee: 0,
+      paymentType: 'CASH_ON_DELIVERY',
     })
+    const testOrderId = orderResponse.body.id
 
-    const orderData = await orderResponse.json()
-    const testOrderId = orderData.id
-
-    const response = await fetch('http://localhost:3000/api/seller/orders', {
-      headers: { 'Authorization': `Bearer ${authToken}` }
-    })
-
-    const data = await response.json()
+    const response = await getSellerOrders(authToken)
 
     expect(response.status).toBe(200)
-    expect(data.orders).toBeDefined()
-    expect(Array.isArray(data.orders)).toBe(true)
-    expect(data.orders.length).toBe(1)
+    expect(response.body.orders).toBeDefined()
+    expect(Array.isArray(response.body.orders)).toBe(true)
+    expect(response.body.orders.length).toBe(1)
 
-    const order = data.orders[0]
+    const order = response.body.orders[0]
     expect(order.id).toBe(testOrderId)
     expect(order.publicOrderNumber).toBeDefined()
     expect(order.status).toBe('PENDING')
@@ -250,37 +324,27 @@ describe('API Flow Integration Tests', () => {
       },
     })
 
-    const orderResponse = await fetch('http://localhost:3000/api/public/demo-store/orders', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        customerName: 'Test Customer 3',
-        customerPhone: '+1234567892',
-        addressText: '125 Test St',
-        items: [{ productId, quantity: 1 }],
-        deliveryFee: 0,
-        paymentType: 'CASH_ON_DELIVERY'
-      })
+    const orderResponse = await createPublicOrder({
+      customerName: 'Test Customer 3',
+      customerPhone: '+1234567892',
+      addressText: '125 Test St',
+      items: [{ productId, quantity: 1 }],
+      deliveryFee: 0,
+      paymentType: 'CASH_ON_DELIVERY',
     })
+    const testOrderId = orderResponse.body.id
 
-    const orderData = await orderResponse.json()
-    const testOrderId = orderData.id
-
-    const response = await fetch(`http://localhost:3000/api/seller/orders/${testOrderId}`, {
-      headers: { 'Authorization': `Bearer ${authToken}` }
-    })
-
-    const data = await response.json()
+    const response = await getSellerOrder(authToken, testOrderId)
 
     expect(response.status).toBe(200)
-    expect(data.order).toBeDefined()
-    expect(data.order.id).toBe(testOrderId)
-    expect(data.order.orderItems).toBeDefined()
-    expect(Array.isArray(data.order.orderItems)).toBe(true)
-    expect(data.order.orderItems.length).toBe(1)
-    expect(data.order.events).toBeDefined()
-    expect(Array.isArray(data.order.events)).toBe(true)
-    expect(data.order.events.length).toBe(1)
+    expect(response.body.order).toBeDefined()
+    expect(response.body.order.id).toBe(testOrderId)
+    expect(response.body.order.orderItems).toBeDefined()
+    expect(Array.isArray(response.body.order.orderItems)).toBe(true)
+    expect(response.body.order.orderItems.length).toBe(1)
+    expect(response.body.order.events).toBeDefined()
+    expect(Array.isArray(response.body.order.events)).toBe(true)
+    expect(response.body.order.events.length).toBe(1)
   })
 
   it('should patch status to CONFIRMED successfully', async () => {
@@ -296,39 +360,26 @@ describe('API Flow Integration Tests', () => {
       },
     })
 
-    const orderResponse = await fetch('http://localhost:3000/api/public/demo-store/orders', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        customerName: 'Test Customer 4',
-        customerPhone: '+1234567893',
-        addressText: '126 Test St',
-        items: [{ productId, quantity: 1 }],
-        deliveryFee: 0,
-        paymentType: 'CASH_ON_DELIVERY'
-      })
+    const orderResponse = await createPublicOrder({
+      customerName: 'Test Customer 4',
+      customerPhone: '+1234567893',
+      addressText: '126 Test St',
+      items: [{ productId, quantity: 1 }],
+      deliveryFee: 0,
+      paymentType: 'CASH_ON_DELIVERY',
     })
+    const testOrderId = orderResponse.body.id
 
-    const orderData = await orderResponse.json()
-    const testOrderId = orderData.id
-
-    const response = await fetch(`http://localhost:3000/api/seller/orders/${testOrderId}/status`, {
-      method: 'PATCH',
-      headers: {
-        'Authorization': `Bearer ${authToken}`,
-        'Content-Type': 'application/json'
-      },
-      body: JSON.stringify({
-        status: 'CONFIRMED',
-        reason: 'Test confirmation'
-      })
-    })
-
-    const data = await response.json()
+    const response = await updateSellerOrderStatus(
+      authToken,
+      testOrderId,
+      'CONFIRMED',
+      'Test confirmation'
+    )
 
     expect(response.status).toBe(200)
-    expect(data.order).toBeDefined()
-    expect(data.order.status).toBe('CONFIRMED')
+    expect(response.body.order).toBeDefined()
+    expect(response.body.order?.status).toBe('CONFIRMED')
 
     // Verify second event was created
     const eventCount = await prisma.orderEvent.count()
@@ -357,50 +408,28 @@ describe('API Flow Integration Tests', () => {
       },
     })
 
-    const orderResponse = await fetch('http://localhost:3000/api/public/demo-store/orders', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        customerName: 'Test Customer 5',
-        customerPhone: '+1234567894',
-        addressText: '127 Test St',
-        items: [{ productId, quantity: 1 }],
-        deliveryFee: 0,
-        paymentType: 'CASH_ON_DELIVERY'
-      })
+    const orderResponse = await createPublicOrder({
+      customerName: 'Test Customer 5',
+      customerPhone: '+1234567894',
+      addressText: '127 Test St',
+      items: [{ productId, quantity: 1 }],
+      deliveryFee: 0,
+      paymentType: 'CASH_ON_DELIVERY',
     })
-
-    const orderData = await orderResponse.json()
-    const testOrderId = orderData.id
+    const testOrderId = orderResponse.body.id
 
     // First confirm the order
-    await fetch(`http://localhost:3000/api/seller/orders/${testOrderId}/status`, {
-      method: 'PATCH',
-      headers: {
-        'Authorization': `Bearer ${authToken}`,
-        'Content-Type': 'application/json'
-      },
-      body: JSON.stringify({
-        status: 'CONFIRMED',
-        reason: 'Initial confirmation'
-      })
-    })
+    await updateSellerOrderStatus(authToken, testOrderId, 'CONFIRMED', 'Initial confirmation')
 
     // Try to transition from CONFIRMED to PENDING (invalid)
-    const response = await fetch(`http://localhost:3000/api/seller/orders/${testOrderId}/status`, {
-      method: 'PATCH',
-      headers: {
-        'Authorization': `Bearer ${authToken}`,
-        'Content-Type': 'application/json'
-      },
-      body: JSON.stringify({
-        status: 'PENDING',
-        reason: 'Invalid transition test'
-      })
-    })
+    const response = await updateSellerOrderStatus(
+      authToken,
+      testOrderId,
+      'PENDING',
+      'Invalid transition test'
+    )
 
     expect(response.status).toBe(400)
-    const data = await response.json()
-    expect(data.error).toBeDefined()
+    expect(response.body.error).toBeDefined()
   })
 })
