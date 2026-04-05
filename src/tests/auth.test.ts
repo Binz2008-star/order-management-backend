@@ -1,7 +1,7 @@
-import { describe, it, expect, beforeEach, beforeAll, afterAll } from 'vitest'
-import { hashPassword, authenticateUser, generateToken, getCurrentUser } from '../server/lib/auth'
-import { prisma } from '../tests/setup'
 import { NextRequest } from 'next/server'
+import { afterAll, beforeAll, beforeEach, describe, expect, it } from 'vitest'
+import { authenticateUser, generateToken, getCurrentUser, hashPassword } from '../server/lib/auth'
+import { prisma } from '../tests/setup'
 
 describe('Authentication', () => {
   const originalJwtSecret = process.env.JWT_SECRET
@@ -123,7 +123,7 @@ describe('Authentication', () => {
             role: 'SELLER',
             sellerId: 'seller-1',
           })
-        ).toThrow('JWT_SECRET environment variable is required')
+        ).toThrow('Authentication configuration error')
       } finally {
         process.env.JWT_SECRET = previousJwtSecret
       }
