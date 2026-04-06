@@ -240,6 +240,10 @@ NEXTAUTH_URL="https://your-domain.vercel.app"
 # Admin Seed Security
 ADMIN_SEED_TOKEN="your-secure-seed-token"
 
+# Cron Reconciliation (recommended in production)
+CRON_SECRET="your-secure-cron-secret"
+CRON_RECONCILE_LIMIT="100"
+
 # Rate Limiting (Optional)
 REDIS_URL="redis://localhost:6379"
 UPSTASH_REDIS_REST_URL="https://your-upstash-url"
@@ -320,6 +324,10 @@ npm run seed
 - `POST /api/seller/products` - Create product
 - `PATCH /api/seller/products/{id}` - Update product
 - `DELETE /api/seller/products/{id}` - Delete product
+
+### Cron Endpoints (Protected)
+
+- `GET /api/cron/reconcile-payments` - Reconcile pending/failed Stripe `payment_intent.succeeded` events (requires `Authorization: Bearer $CRON_SECRET`)
 
 ## 🤝 Contributing
 

@@ -32,7 +32,9 @@ export function validateProductionEnvironment(): EnvValidationResult {
     'UPSTASH_REDIS_REST_URL',
     'UPSTASH_REDIS_REST_TOKEN',
     'STRIPE_WEBHOOK_SECRET',
-    'WHATSAPP_WEBHOOK_SECRET'
+    'WHATSAPP_WEBHOOK_SECRET',
+    'CRON_SECRET',
+    'CRON_RECONCILE_LIMIT'
   ]
 
   // Check required variables
@@ -63,6 +65,10 @@ export function validateProductionEnvironment(): EnvValidationResult {
 
     if (process.env.DATABASE_URL?.includes('dev.db')) {
       warnings.push('Using development database in production')
+    }
+
+    if (!process.env.CRON_SECRET) {
+      warnings.push('CRON_SECRET is not set - scheduled payment reconciliation endpoint will reject cron calls')
     }
   }
 

@@ -14,6 +14,8 @@
 - [ ] `UPSTASH_REDIS_REST_TOKEN` - For production rate limiting
 - [ ] `STRIPE_WEBHOOK_SECRET` - If using Stripe payments
 - [ ] `WHATSAPP_WEBHOOK_SECRET` - If using WhatsApp integration
+- [ ] `CRON_SECRET` - Required for protected cron reconciliation endpoint
+- [ ] `CRON_RECONCILE_LIMIT` - Controls max events scanned per cron run
 
 ## 📋 Phase 2: Deployment Steps
 
@@ -57,6 +59,7 @@ npm run verify:prod
 - [ ] Verify order status transitions
 - [ ] Test order event creation
 - [ ] Verify stock updates
+- [ ] Trigger `/api/cron/reconcile-payments` with `Authorization: Bearer $CRON_SECRET` and verify `status: ok`
 
 ### ⚡ Rate Limiting Tests
 - [ ] Test auth endpoint rate limiting (5 req/min)
