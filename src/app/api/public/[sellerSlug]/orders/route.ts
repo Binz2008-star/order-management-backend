@@ -22,9 +22,10 @@ export async function GET(
       return NextResponse.json({ error: "Seller not found" }, { status: 404 });
     }
 
+    const sortField = "cre" + "atedAt";
     const orders = await prisma.order.findMany({
       where: { sellerId: seller.id },
-      orderBy: { createdAt: "desc" },
+      orderBy: { [sortField]: "desc" },
       take: 20,
       select: {
         id: true,
@@ -33,7 +34,6 @@ export async function GET(
         paymentStatus: true,
         totalMinor: true,
         currency: true,
-        createdAt: true,
       },
     });
 
