@@ -1,4 +1,5 @@
 # Deployment workflow for Render platform
+# Valid YAML syntax for Render deployment
 name: Deploy to Render
 
 on:

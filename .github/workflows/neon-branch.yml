@@ -1,4 +1,5 @@
 # Creates temporary Neon database branches for PR testing
+# Uses step outputs for EXPIRES_AT context access
 name: Create/Delete Branch for Pull Request
 
 on:
