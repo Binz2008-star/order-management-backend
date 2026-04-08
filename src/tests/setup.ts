@@ -1,64 +1,60 @@
 import { PrismaClient } from '@prisma/client'
-import { vi } from 'vitest'
+import { afterAll, beforeAll, beforeEach, vi } from 'vitest'
 
-// Mock NextRequest for API tests
 vi.mock('next/server', () => ({
   NextRequest: class MockNextRequest {
-    constructor(url: string, init?: RequestInit) {
-      this.url = url
-      this.method = init?.method || 'GET'
-      this.headers = new Headers(init?.headers)
-      this.body = init?.body
-    }
     url: string
     method: string
     headers: Headers
     body: unknown
     ip = '127.0.0.1'
-    json = async () => {
-      if (typeof this.body === 'string') {
-        return JSON.parse(this.body)
-      }
 
+    constructor(url: string, init?: RequestInit) {
+      this.url = url
+      this.method = init?.method ?? 'GET'
+      this.headers = new Headers(init?.headers)
+      this.body = init?.body
+    }
+
+    async json() {
+      if (typeof this.body === 'string') return JSON.parse(this.body)
       if (this.body instanceof ArrayBuffer) {
         return JSON.parse(Buffer.from(this.body).toString('utf8'))
       }
-
       return this.body
     }
-    text = async () => {
-      if (typeof this.body === 'string') {
-        return this.body
-      }
 
+    async text() {
+      if (typeof this.body === 'string') return this.body
       if (this.body instanceof ArrayBuffer) {
         return Buffer.from(this.body).toString('utf8')
       }
-
-      return this.body === undefined || this.body === null
-        ? ''
-        : String(this.body)
+      return this.body == null ? '' : String(this.body)
     }
   },
+
   NextResponse: {
-    json: (data: unknown, init?: ResponseInit) => ({
-      ...init,
-      json: () => Promise.resolve(data),
-      status: init?.status || 200,
-    }),
+    json: (data: unknown, init?: ResponseInit) =>
+      new Response(JSON.stringify(data), {
+        status: init?.status ?? 200,
+        headers: {
+          'content-type': 'application/json',
+          ...(init?.headers ?? {}),
+        },
+      }),
   },
 }))
 
-// Setup test environment variables
 process.env.JWT_SECRET = 'test-jwt-secret'
-process.env.DATABASE_URL ??= 'postgresql://postgres:postgres@localhost:5432/order_management_test?schema=public'
 
-const databaseUrl = process.env.DATABASE_URL
+if (!process.env.DATABASE_URL) {
+  throw new Error('DATABASE_URL must be set for tests')
+}
 
-const prisma = new PrismaClient({
+export const prisma = new PrismaClient({
   datasources: {
     db: {
-      url: databaseUrl,
+      url: process.env.DATABASE_URL,
     },
   },
 })
@@ -72,17 +68,15 @@ afterAll(async () => {
 })
 
 beforeEach(async () => {
-  // Clean up only order-related data, keep seed data
   await prisma.orderEvent.deleteMany()
   await prisma.paymentAttempt.deleteMany()
   await prisma.orderItem.deleteMany()
   await prisma.order.deleteMany()
   await prisma.customer.deleteMany()
-
-  // Add a small delay to ensure cleanup is complete
-  await new Promise(resolve => setTimeout(resolve, 10))
 })
 
-  ; (global as typeof global & { prisma: typeof prisma }).prisma = prisma
+declare global {
+  var prisma: PrismaClient | undefined
+}
 
-export { prisma }
+globalThis.prisma = prisma
