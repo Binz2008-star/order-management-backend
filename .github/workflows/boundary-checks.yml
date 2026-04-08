@@ -150,7 +150,7 @@ jobs:
           done
 
           # Queries should be read-only (exclude test files)
-          QUERY_FILES=$(find src/ -name "*.ts" -o -name "*.js" | grep -v "/tests/" | xargs grep -l "GET")
+          QUERY_FILES=$(find src/ -name "*.ts" -o -name "*.js" -not -path "*/tests/*" | xargs grep -l "GET")
 
           for file in $QUERY_FILES; do
             # Should NOT have mutations - check for actual Prisma operations, not field names
