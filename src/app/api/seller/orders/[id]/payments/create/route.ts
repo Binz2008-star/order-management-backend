@@ -4,7 +4,7 @@ import { ApiError } from '@/server/lib/errors'
 import { PaymentService } from '@/server/services/payment.service'
 import { NextRequest, NextResponse } from 'next/server'
 
-async function getOrderPaymentAttempts(
+async function createPaymentAttempt(
   { id }: { id: string },
   request: NextRequest
 ) {
@@ -23,28 +23,28 @@ async function getOrderPaymentAttempts(
     throw new ApiError(404, 'Order not found')
   }
 
-  const paymentAttempts = await PaymentService.getOrderPaymentAttempts(id)
+  const body = await request.json()
+  // Note: PaymentService.createPaymentAttempt() handles transactions and audit logging internally
+  const paymentAttempt = await PaymentService.createPaymentAttempt({
+    orderId: id,
+    provider: body.provider,
+    amountMinor: body.amountMinor,
+    currency: body.currency,
+    metadata: body.metadata,
+  }, user.id)
 
   return NextResponse.json({
-    paymentAttempts,
-    order: {
-      id: order.id,
-      publicOrderNumber: order.publicOrderNumber,
-      totalMinor: order.totalMinor,
-      currency: order.currency,
-      paymentStatus: order.paymentStatus,
-    },
+    paymentAttempt,
   })
 }
 
-
-export async function GET(
+export async function POST(
   request: NextRequest,
   { params }: { params: Promise<{ id: string }> }
 ) {
   try {
     const { id } = await params
-    return getOrderPaymentAttempts({ id }, request)
+    return createPaymentAttempt({ id }, request)
   } catch (_error) {
     return NextResponse.json(
       { error: 'Invalid parameters' },
