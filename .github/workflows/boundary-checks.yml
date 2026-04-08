@@ -154,13 +154,13 @@ jobs:
 
         for file in $QUERY_FILES; do
           # Should NOT have mutations - check for actual Prisma operations, not field names
-          if grep -q "\.create\(\|\.createMany\(\|\.update\(\|\.updateMany\(\|\.delete\(\|\.deleteMany\(\|\.upsert\(\|\.remove\(" "$file"; then
+          if grep -qE "\.create\(|\.createMany\(|\.update\(|\.updateMany\(|\.delete\(|\.deleteMany\(|\.upsert\(|\.remove\(" "$file"; then
             echo "VIOLATION: Query endpoint with mutations: $file"
             exit 1
           fi
 
           # Also check for POST/PATCH/DELETE handlers in query files
-          if grep -q "export async function POST\|export async function PATCH\|export async function DELETE" "$file"; then
+          if grep -qE "export async function (POST|PATCH|DELETE)" "$file"; then
             echo "VIOLATION: Query endpoint with command handlers: $file"
             exit 1
           fi
