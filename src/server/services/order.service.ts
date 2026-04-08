@@ -100,6 +100,15 @@ export class OrderService {
         data: orderItemsWithOrderId
       })
 
+      // Fetch order with items for response
+      const orderWithItems = await tx.order.findUnique({
+        where: { id: order.id },
+        include: {
+          customer: true,
+          orderItems: true
+        }
+      })
+
       // Log order creation event using centralized service
       await createOrderEvent(tx, {
         orderId: order.id,
@@ -119,7 +128,7 @@ export class OrderService {
         publicOrderNumber: order.publicOrderNumber
       })
 
-      return order
+      return orderWithItems
     }, { timeout: 15000, maxWait: 5000 })
   }
 

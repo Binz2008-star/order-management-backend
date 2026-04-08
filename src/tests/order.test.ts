@@ -15,6 +15,9 @@ describe('Order Creation', () => {
   })
 
   it('should create an order with items', async () => {
+    // Import OrderService
+    const { OrderService } = await import('../server/services/order.service')
+
     // Create seller
     const user = await prisma.user.create({
       data: {
@@ -46,32 +49,21 @@ describe('Order Creation', () => {
       },
     })
 
-    // Create order
-    const order = await prisma.order.create({
-      data: {
-        sellerId: seller.id,
-        customerId: customer.id,
-        publicOrderNumber: generatePublicOrderNumber(),
-        subtotalMinor: 1999,
-        deliveryFeeMinor: 500,
-        totalMinor: 2499,
-        currency: 'USD',
-        status: 'PENDING',
-        paymentStatus: 'PENDING',
-      },
-    })
-
-    // Create order item
-    const orderItem = await prisma.orderItem.create({
-      data: {
-        orderId: order.id,
+    // Create order using new service (no Product dependency)
+    const orderService = new OrderService()
+    const order = await orderService.createOrder({
+      sellerId: seller.id,
+      customerId: customer.id,
+      items: [{
         productId: 'test-product-id',
         productNameSnapshot: 'Test Product',
         unitPriceMinor: 1999,
         quantity: 1,
-        lineTotalMinor: 1999,
-      },
-    })
+      }],
+      currency: 'USD',
+      paymentType: 'CARD',
+      notes: 'Test order',
+    }, user.id)
 
     // Create order event
     const orderEvent = await createOrderEvent(prisma, {
@@ -81,10 +73,12 @@ describe('Order Creation', () => {
     })
 
     expect(order.id).toBeDefined()
-    expect(order.publicOrderNumber).toMatch(/^ORD-[A-Z0-9_-]{8,9}$/)
-    expect(order.totalMinor).toBe(2499)
-    expect(orderItem.quantity).toBe(1)
-    expect(orderItem.lineTotalMinor).toBe(1999)
+    expect(order.publicOrderNumber).toMatch(/^ORD-\d{8}-\d{3}-[a-z0-9]+$/)
+    expect(order.totalMinor).toBe(1999)
+    expect(order.orderItems).toHaveLength(1)
+    expect(order.orderItems[0].quantity).toBe(1)
+    expect(order.orderItems[0].lineTotalMinor).toBe(1999)
+    expect(order.orderItems[0].productNameSnapshot).toBe('Test Product')
     expect(orderEvent.eventType).toBe('order_created')
   })
 
