@@ -67,18 +67,18 @@ describe('Order Creation', () => {
 
     // Create order event
     const orderEvent = await createOrderEvent(prisma, {
-      orderId: order.id,
+      orderId: order!.id,
       eventType: 'order_created',
       payload: { source: 'test' },
     })
 
-    expect(order.id).toBeDefined()
-    expect(order.publicOrderNumber).toMatch(/^ORD-\d{8}-\d{3}-[a-z0-9]+$/)
-    expect(order.totalMinor).toBe(1999)
-    expect(order.orderItems).toHaveLength(1)
-    expect(order.orderItems[0].quantity).toBe(1)
-    expect(order.orderItems[0].lineTotalMinor).toBe(1999)
-    expect(order.orderItems[0].productNameSnapshot).toBe('Test Product')
+    expect(order!.id).toBeDefined()
+    expect(order!.publicOrderNumber).toMatch(/^ORD-\d{8}-\d{3}-[a-z0-9]+$/)
+    expect(order!.totalMinor).toBe(1999)
+    expect(order!.orderItems).toHaveLength(1)
+    expect(order!.orderItems[0].quantity).toBe(1)
+    expect(order!.orderItems[0].lineTotalMinor).toBe(1999)
+    expect(order!.orderItems[0].productNameSnapshot).toBe('Test Product')
     expect(orderEvent.eventType).toBe('order_created')
   })
 
