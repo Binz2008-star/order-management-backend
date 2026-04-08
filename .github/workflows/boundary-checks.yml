@@ -9,15 +9,15 @@ on:
 jobs:
   boundary-checks:
     runs-on: ubuntu-latest
-    
+
     steps:
     - name: Checkout code
       uses: actions/checkout@v4
-      
+
     - name: Check for forbidden platform logic
       run: |
         echo "Checking for forbidden platform domain leakage in runtime..."
-        
+
         # Forbidden patterns that indicate platform logic
         FORBIDDEN_PATTERNS=(
           "catalog.*create"
@@ -30,9 +30,9 @@ jobs:
           "localization.*translate"
           "whatsapp.*send"
         )
-        
+
         VIOLATIONS_FOUND=false
-        
+
         for pattern in "${FORBIDDEN_PATTERNS[@]}"; do
           echo "Checking pattern: $pattern"
           if grep -r "$pattern" src/ --include="*.ts" --include="*.js" --include="*.tsx" --include="*.jsx"; then
@@ -40,20 +40,20 @@ jobs:
             VIOLATIONS_FOUND=true
           fi
         done
-        
+
         # Check for platform database tables
         if grep -r "model.*Product" prisma/; then
           echo "VIOLATION: Product model found in runtime schema"
           echo "Products belong in platform, not runtime"
           VIOLATIONS_FOUND=true
         fi
-        
+
         if grep -r "model.*Opportunity" prisma/; then
           echo "VIOLATION: Opportunity model found in runtime schema"
           echo "Opportunities belong in platform, not runtime"
           VIOLATIONS_FOUND=true
         fi
-        
+
         if [ "$VIOLATIONS_FOUND" = true ]; then
           echo "FAILED: Boundary violations detected"
           echo "Review REPO_CONTRACT.md and DATA_OWNERSHIP_RULES.md"
@@ -61,20 +61,20 @@ jobs:
         else
           echo "PASSED: No boundary violations found"
         fi
-        
+
     - name: Verify runtime authority
       run: |
         echo "Checking runtime domain ownership..."
-        
+
         # Should have runtime logic
         if ! find src/ -name "*.ts" -o -name "*.js" | xargs grep -l "order" | head -1; then
           echo "WARNING: No order logic found - verify this is intended"
         fi
-        
+
         if ! find src/ -name "*.ts" -o -name "*.js" | xargs grep -l "payment" | head -1; then
           echo "WARNING: No payment logic found - verify this is intended"
         fi
-        
+
         # Should have runtime tables
         if ! grep -r "model.*Order" prisma/; then
           echo "VIOLATION: Order model missing from runtime schema"
@@ -83,7 +83,7 @@ jobs:
         else
           echo "PASSED: Runtime ownership verified"
         fi
-        
+
         if ! grep -r "model.*Payment" prisma/; then
           echo "VIOLATION: Payment model missing from runtime schema"
           echo "Payments belong in runtime"
@@ -91,11 +91,11 @@ jobs:
         else
           echo "PASSED: Runtime ownership verified"
         fi
-        
+
     - name: Check API endpoint authority
       run: |
         echo "Checking API endpoint authority..."
-        
+
         # Runtime should expose command endpoints
         REQUIRED_COMMAND_ENDPOINTS=(
           "POST.*orders"
@@ -104,14 +104,14 @@ jobs:
           "POST.*inventory.*reserve"
           "POST.*auth.*login"
         )
-        
+
         for endpoint in "${REQUIRED_COMMAND_ENDPOINTS[@]}"; do
           if ! grep -r "$endpoint" src/ --include="*.ts" --include="*.js"; then
             echo "WARNING: Command endpoint '$endpoint' not found"
             echo "Verify this endpoint is implemented"
           fi
         done
-        
+
         # Runtime should NOT expose platform endpoints
         PLATFORM_ENDPOINTS=(
           "POST.*catalog.*products"
@@ -119,7 +119,7 @@ jobs:
           "GET.*opportunities"
           "POST.*workflow.*execute"
         )
-        
+
         for endpoint in "${PLATFORM_ENDPOINTS[@]}"; do
           if grep -r "$endpoint" src/ --include="*.ts" --include="*.js"; then
             echo "VIOLATION: Platform endpoint '$endpoint' found in runtime"
@@ -127,37 +127,43 @@ jobs:
             exit 1
           fi
         done
-        
+
         echo "PASSED: API authority correct"
-        
+
     - name: Verify command/query separation
       run: |
         echo "Checking command/query API separation..."
-        
+
         # Commands should have side effects
         COMMAND_FILES=$(find src/ -name "*.ts" -o -name "*.js" | xargs grep -l "POST\|PATCH\|DELETE")
-        
+
         for file in $COMMAND_FILES; do
           # Should have audit logging
           if ! grep -q "audit\|event\|log" "$file"; then
             echo "WARNING: Command endpoint without audit logging: $file"
           fi
-          
+
           # Should have transaction handling
           if ! grep -q "transaction\|prisma.*\$transaction" "$file"; then
             echo "WARNING: Command endpoint without transaction: $file"
           fi
         done
-        
+
         # Queries should be read-only
         QUERY_FILES=$(find src/ -name "*.ts" -o -name "*.js" | xargs grep -l "GET")
-        
+
         for file in $QUERY_FILES; do
-          # Should NOT have mutations
-          if grep -q "create\|update\|delete\|remove" "$file"; then
+          # Should NOT have mutations - check for actual Prisma operations, not field names
+          if grep -q "\.create\(\|\.createMany\(\|\.update\(\|\.updateMany\(\|\.delete\(\|\.deleteMany\(\|\.upsert\(\|\.remove\(" "$file"; then
             echo "VIOLATION: Query endpoint with mutations: $file"
             exit 1
           fi
+
+          # Also check for POST/PATCH/DELETE handlers in query files
+          if grep -q "export async function POST\|export async function PATCH\|export async function DELETE" "$file"; then
+            echo "VIOLATION: Query endpoint with command handlers: $file"
+            exit 1
+          fi
         done
-        
+
         echo "PASSED: Command/query separation verified"
