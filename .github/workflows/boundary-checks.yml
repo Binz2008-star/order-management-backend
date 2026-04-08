@@ -134,35 +134,47 @@ jobs:
         run: |
           echo "Checking command/query API separation..."
 
-          # Commands should have side effects
-          COMMAND_FILES=$(find src/ -name "*.ts" -o -name "*.js" | xargs grep -l "POST\|PATCH\|DELETE")
+          # Only check actual API route files
+          ROUTE_FILES=$(find src/app/api -name "route.ts")
 
-          for file in $COMMAND_FILES; do
-            # Should have audit logging
-            if ! grep -q "audit\|event\|log" "$file"; then
-              echo "WARNING: Command endpoint without audit logging: $file"
+          if [ -z "$ROUTE_FILES" ]; then
+            echo "WARNING: No route files found in src/app/api/"
+          fi
+
+          for file in $ROUTE_FILES; do
+            # Check what HTTP methods are exported
+            HAS_GET=$(grep -q "export async function GET" "$file" && echo "true" || echo "false")
+            HAS_POST=$(grep -q "export async function POST" "$file" && echo "true" || echo "false")
+            HAS_PATCH=$(grep -q "export async function PATCH" "$file" && echo "true" || echo "false")
+            HAS_DELETE=$(grep -q "export async function DELETE" "$file" && echo "true" || echo "false")
+
+            # Command endpoints (POST, PATCH, DELETE) should have audit logging
+            if [ "$HAS_POST" = "true" ] || [ "$HAS_PATCH" = "true" ] || [ "$HAS_DELETE" = "true" ]; then
+              if ! grep -q "audit\|event\|log" "$file"; then
+                echo "WARNING: Command endpoint without audit logging: $file"
+              fi
+
+              # Should have transaction handling
+              if ! grep -q "transaction\|prisma.*\$transaction" "$file"; then
+                echo "WARNING: Command endpoint without transaction: $file"
+              fi
             fi
 
-            # Should have transaction handling
-            if ! grep -q "transaction\|prisma.*\$transaction" "$file"; then
-              echo "WARNING: Command endpoint without transaction: $file"
-            fi
-          done
-
-          # Queries should be read-only (exclude test files)
-          QUERY_FILES=$(find src/ -name "*.ts" -o -name "*.js" -not -path "*/tests/*" | xargs grep -l "GET")
-
-          for file in $QUERY_FILES; do
-            # Should NOT have mutations - check for actual Prisma operations, not field names
-            if grep -qE "\.create\(|\.createMany\(|\.update\(|\.updateMany\(|\.delete\(|\.deleteMany\(|\.upsert\(|\.remove\(" "$file"; then
-              echo "VIOLATION: Query endpoint with mutations: $file"
-              exit 1
+            # Query endpoints (GET) should NOT have mutations
+            if [ "$HAS_GET" = "true" ]; then
+              if grep -qE "\.create\(|\.createMany\(|\.update\(|\.updateMany\(|\.delete\(|\.deleteMany\(|\.upsert\(|\.remove\(" "$file"; then
+                echo "VIOLATION: Query endpoint with mutations: $file"
+                exit 1
+              fi
             fi
 
-            # Also check for POST/PATCH/DELETE handlers in query files
-            if grep -qE "export async function (POST|PATCH|DELETE)" "$file"; then
-              echo "VIOLATION: Query endpoint with command handlers: $file"
-              exit 1
+            # Check for mixed responsibilities (GET + mutations in same file)
+            if [ "$HAS_GET" = "true" ] && ([ "$HAS_POST" = "true" ] || [ "$HAS_PATCH" = "true" ] || [ "$HAS_DELETE" = "true" ]); then
+              if grep -qE "\.create\(|\.createMany\(|\.update\(|\.updateMany\(|\.delete\(|\.deleteMany\(|\.upsert\(|\.remove\(" "$file"; then
+                echo "VIOLATION: Mixed command/query responsibilities in: $file"
+                echo "GET handler found with mutations in same file as command handlers"
+                exit 1
+              fi
             fi
           done
 
