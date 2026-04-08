@@ -10,7 +10,6 @@ describe('Order Creation', () => {
     await prisma.orderItem.deleteMany()
     await prisma.order.deleteMany()
     await prisma.customer.deleteMany()
-    await prisma.product.deleteMany()
     await prisma.seller.deleteMany()
     await prisma.user.deleteMany()
   })
@@ -34,19 +33,6 @@ describe('Order Creation', () => {
         slug: 'test-store',
         currency: 'USD',
         status: 'ACTIVE',
-      },
-    })
-
-    // Create product
-    const product = await prisma.product.create({
-      data: {
-        sellerId: seller.id,
-        name: 'Test Product',
-        slug: 'test-product',
-        priceMinor: 1999,
-        currency: 'USD',
-        stockQuantity: 100,
-        isActive: true,
       },
     })
 
@@ -79,11 +65,11 @@ describe('Order Creation', () => {
     const orderItem = await prisma.orderItem.create({
       data: {
         orderId: order.id,
-        productId: product.id,
-        productNameSnapshot: product.name,
-        unitPriceMinor: product.priceMinor,
+        productId: 'test-product-id',
+        productNameSnapshot: 'Test Product',
+        unitPriceMinor: 1999,
         quantity: 1,
-        lineTotalMinor: product.priceMinor,
+        lineTotalMinor: 1999,
       },
     })
 
