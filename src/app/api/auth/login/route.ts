@@ -5,11 +5,12 @@ import type { AuthUser } from '@/server/lib/auth'
 import { generateToken, verifyPassword } from '@/server/lib/auth'
 import { RATE_LIMIT_CONFIGS } from '@/server/lib/rate-limit'
 import { LoginSchema, type LoginInput } from '@/server/lib/validation'
+import { Prisma } from '@prisma/client'
 
 async function authenticateUserWithTransaction(
   email: string,
   password: string,
-  tx = prisma
+  tx: Prisma.TransactionClient = prisma
 ): Promise<{ user: AuthUser; token: string }> {
   const user = await tx.user.findUnique({
     where: { email: email.toLowerCase().trim() },
