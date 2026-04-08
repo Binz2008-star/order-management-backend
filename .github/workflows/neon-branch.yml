@@ -1,3 +1,4 @@
+# Creates temporary Neon database branches for PR testing
 name: Create/Delete Branch for Pull Request
 
 on:
