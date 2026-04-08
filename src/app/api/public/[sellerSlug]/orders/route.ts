@@ -104,12 +104,12 @@ export async function POST(
     // Product validation moved to platform layer
     // Runtime only stores product snapshots from request data
 
-    const pricedItems = body.items.map((item: any) => ({
+    const pricedItems = body.items.map((item: { productId: string; quantity: number }) => ({
       productId: item.productId,
-      productNameSnapshot: item.productNameSnapshot || `Product ${item.productId}`,
-      unitPriceMinor: item.unitPriceMinor,
+      productNameSnapshot: `Product ${item.productId}`,
+      unitPriceMinor: 0, // TODO: Get from platform API
       quantity: item.quantity,
-      lineTotalMinor: item.unitPriceMinor * item.quantity,
+      lineTotalMinor: 0, // TODO: Calculate with real price
     }));
 
     const totals = calculateOrderTotal(
