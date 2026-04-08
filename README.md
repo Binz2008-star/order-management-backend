@@ -34,7 +34,7 @@ npm install
 
 # Setup database
 npm run db:generate
-npm run db:migrate
+npm run db:deploy
 npm run db:seed
 
 # Start development server
@@ -67,10 +67,10 @@ npm run test
 ### Database
 
 - `npm run db:generate` - Generate Prisma client
-- `npm run db:migrate` - Run migrations
-- `npm run db:studio` - Open Prisma Studio
-- `npm run db:seed` - Reset and seed database
-- `npm run seed` - Seed database only
+- `npm run db:migrate` - Create new migrations (interactive, development only)
+- `npm run db:deploy` - Apply existing migrations (non-interactive, CI/production)
+- `npm run db:seed` - Seed database with initial data
+- `npm run db:studio` - Open Prisma Studio database browser
 
 ### Code Quality
 
