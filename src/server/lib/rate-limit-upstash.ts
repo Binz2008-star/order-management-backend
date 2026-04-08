@@ -1,3 +1,4 @@
+// Rate limiting store - no database transactions needed (Upstash operations are atomic)
 import { logger } from './logger'
 import { RateLimitResult, RateLimitStore } from './rate-limit-store'
 

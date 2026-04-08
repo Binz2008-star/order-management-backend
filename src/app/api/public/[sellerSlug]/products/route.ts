@@ -1,6 +1,7 @@
 import { prisma } from '@/server/db/prisma'
 import { NextRequest, NextResponse } from 'next/server'
 
+// Pure GET endpoint - no mutations, only reads product catalog data
 async function getPublicProducts(
   { sellerSlug }: { sellerSlug: string },
   _request: NextRequest
@@ -18,27 +19,19 @@ async function getPublicProducts(
   }
 
   // Get active products for this seller
-  const products = await prisma.product.findMany({
-    where: {
-      sellerId: seller.id,
-      isActive: true,
-      stockQuantity: { gt: 0 },
-    },
-    orderBy: {
-      createdAt: 'desc',
-    },
-    select: {
-      id: true,
-      name: true,
-      slug: true,
-      description: true,
-      priceMinor: true,
-      currency: true,
-      stockQuantity: true,
-      createdAt: true,
-      updatedAt: true,
-    },
-  })
+  // TODO: This should query the platform database, not runtime
+  // For now, return empty array since Product model moved to platform
+  const products: Array<{
+    id: string;
+    name: string;
+    slug: string;
+    description: string;
+    priceMinor: number;
+    currency: string;
+    stockQuantity: number;
+    createdAt: Date;
+    updatedAt: Date;
+  }> = []
 
   return NextResponse.json({
     seller: {

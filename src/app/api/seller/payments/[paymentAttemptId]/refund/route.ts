@@ -22,6 +22,7 @@ async function refundPayment(
   }
 
   const body = await request.json()
+  // Note: PaymentService.refundPayment() handles transactions and audit logging internally
   const refundedPayment = await PaymentService.refundPayment({
     paymentAttemptId,
     refundAmountMinor: body.refundAmountMinor,

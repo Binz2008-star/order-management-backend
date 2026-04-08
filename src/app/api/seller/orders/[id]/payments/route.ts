@@ -24,6 +24,7 @@ async function createPaymentAttempt(
   }
 
   const body = await request.json()
+  // Note: PaymentService.createPaymentAttempt() handles transactions and audit logging internally
   const paymentAttempt = await PaymentService.createPaymentAttempt({
     orderId: id,
     provider: body.provider,
