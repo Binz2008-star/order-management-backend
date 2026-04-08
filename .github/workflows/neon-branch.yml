@@ -62,6 +62,10 @@ jobs:
           node-version: '22'
       - name: Install dependencies
         run: npm ci
+      - name: Generate Prisma Client
+        run: npx prisma generate
+        env:
+          DATABASE_URL: "${{ steps.create_neon_branch.outputs.db_url_with_pooler }}"
       - name: Run Migrations
         run: npm run db:deploy
         env:
