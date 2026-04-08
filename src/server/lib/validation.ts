@@ -28,6 +28,8 @@ const phoneSchema = z
 
 const orderItemSchema = z.object({
   productId: cuidLikeId,
+  productNameSnapshot: z.string().min(1, 'Product name is required'),
+  unitPriceMinor: z.coerce.number().int('Price must be an integer').min(0, 'Price must be non-negative'),
   quantity: z.coerce.number().int('Quantity must be an integer').min(1, 'Quantity must be at least 1'),
 })
 

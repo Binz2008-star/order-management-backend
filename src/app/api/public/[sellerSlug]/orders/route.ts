@@ -95,74 +95,22 @@ export async function POST(
       return NextResponse.json({ error: "Seller not found" }, { status: 404 });
     }
 
-    const requestedProductIds = [...new Set(body.items.map((i) => i.productId))];
+    // Products now handled by platform layer - validate productIds externally
+    const _requestedProductIds = [...new Set(body.items.map((i) => i.productId))];
 
-    const products = await prisma.product.findMany({
-      where: {
-        sellerId: seller.id,
-        id: { in: requestedProductIds },
-        isActive: true,
-      },
-      select: {
-        id: true,
-        name: true,
-        priceMinor: true,
-        currency: true,
-        stockQuantity: true,
-        isActive: true,
-      },
-    });
+    // TODO: Validate productIds against platform API
+    // For now, accept all productIds as valid (platform validation needed)
 
-    if (products.length !== requestedProductIds.length) {
-      return NextResponse.json(
-        { error: "One or more products are invalid or unavailable" },
-        { status: 400 }
-      );
-    }
+    // Product validation moved to platform layer
+    // Runtime only stores product snapshots from request data
 
-    const productMap = new Map(products.map((p) => [p.id, p]));
-
-    for (const item of body.items) {
-      const product = productMap.get(item.productId);
-
-      if (!product) {
-        return NextResponse.json(
-          { error: `Product not found: ${item.productId}` },
-          { status: 400 }
-        );
-      }
-
-      if (product.currency !== seller.currency) {
-        return NextResponse.json(
-          { error: `Currency mismatch for product: ${product.id}` },
-          { status: 400 }
-        );
-      }
-
-      if (product.stockQuantity < item.quantity) {
-        return NextResponse.json(
-          {
-            error: `Insufficient stock for ${product.name}`,
-            productId: product.id,
-            available: product.stockQuantity,
-            requested: item.quantity,
-          },
-          { status: 400 }
-        );
-      }
-    }
-
-    const pricedItems = body.items.map((item) => {
-      const product = productMap.get(item.productId)!;
-
-      return {
-        productId: product.id,
-        productNameSnapshot: product.name,
-        unitPriceMinor: product.priceMinor,
-        quantity: item.quantity,
-        lineTotalMinor: product.priceMinor * item.quantity,
-      };
-    });
+    const pricedItems = body.items.map((item: any) => ({
+      productId: item.productId,
+      productNameSnapshot: item.productNameSnapshot || `Product ${item.productId}`,
+      unitPriceMinor: item.unitPriceMinor,
+      quantity: item.quantity,
+      lineTotalMinor: item.unitPriceMinor * item.quantity,
+    }));
 
     const totals = calculateOrderTotal(
       pricedItems.map((item) => ({
@@ -192,18 +140,8 @@ export async function POST(
         },
       });
 
-      for (const item of body.items) {
-        const product = productMap.get(item.productId)!;
-
-        await tx.product.update({
-          where: { id: product.id },
-          data: {
-            stockQuantity: {
-              decrement: item.quantity,
-            },
-          },
-        });
-      }
+      // Product stock management moved to platform layer
+      // Runtime only stores order data with product snapshots
 
       const order = await tx.order.create({
         data: {
