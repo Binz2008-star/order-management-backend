@@ -76,6 +76,13 @@ jobs:
           node-version: "22"
       - name: Install dependencies
         run: npm ci
+      - name: Debug Neon Outputs
+        shell: bash
+        run: |
+          echo "=== DEBUG: Neon Outputs ==="
+          echo "db_url: ${{ steps.neon.outputs.db_url }}"
+          echo "db_url_with_pooler: ${{ steps.neon.outputs.db_url_with_pooler }}"
+          echo "=== END DEBUG ==="
       - name: Validate DATABASE_URL
         shell: bash
         run: |
@@ -87,7 +94,7 @@ jobs:
               echo "DATABASE_URL protocol is valid"
               ;;
             *)
-              echo "DATABASE_URL protocol is invalid"
+              echo "DATABASE_URL protocol is invalid: $DB_URL"
               exit 1
               ;;
           esac
