@@ -42,8 +42,9 @@ export async function GET(_request: NextRequest) {
       dbStatus.responseTime = Date.now() - dbStart;
       dbStatus.status = dbStatus.responseTime < 1000 ? 'healthy' : 'degraded';
     } catch (error) {
-      dbStatus.error = error instanceof Error ? error.message : 'Unknown error';
-      console.error('Health check failed', { error: dbStatus.error });
+      const errorMessage = error instanceof Error ? error.message : 'Unknown error';
+      (dbStatus as HealthStatus['checks']['database'] & { error?: string }).error = errorMessage;
+      console.error('Health check failed', { error: errorMessage });
     }
 
     // Memory check
@@ -63,7 +64,7 @@ export async function GET(_request: NextRequest) {
     };
 
     // Overall status
-    const overallStatus =
+    const overallStatus: 'healthy' | 'degraded' | 'unhealthy' =
       dbStatus.status === 'unhealthy' ||
         memoryStatus.status === 'unhealthy' ||
         errorStatus.status === 'unhealthy' ? 'unhealthy' :

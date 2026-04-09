@@ -154,13 +154,13 @@ class MonitoringMiddleware {
       // Add request ID to request headers for downstream use
       request.headers.set('x-request-id', requestId);
 
-      let response: NextResponse | undefined;
+      let response: NextResponse = new NextResponse();
       let statusCode = 200;
 
       try {
         // Process the request - NOTE: This middleware pattern needs to be adapted for Next.js App Router
         // For now, we'll just pass through the request
-        response = undefined;
+        response = new NextResponse();
         statusCode = 200;
         return response;
       } catch (error) {
@@ -170,7 +170,7 @@ class MonitoringMiddleware {
         const endTime = Date.now();
         const responseTime = endTime - startTime;
 
-        const context = this.extractContext(request, response || new NextResponse());
+        const context = this.extractContext(request, response);
 
         const metrics: RequestMetrics = {
           requestId,
