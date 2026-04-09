@@ -41,8 +41,8 @@ jobs:
   create_neon_branch:
     name: Create Neon Branch
     outputs:
-      db_url: ${{ steps.create_neon_branch_encode.outputs.db_url }}
-      db_url_with_pooler: ${{ steps.create_neon_branch_encode.outputs.db_url_with_pooler }}
+      db_url: ${{ steps.neon.outputs.db_url }}
+      db_url_with_pooler: ${{ steps.neon.outputs.db_url_with_pooler }}
     needs: setup
     if: |
       github.event_name == 'pull_request' && (
@@ -59,19 +59,13 @@ jobs:
         id: get_expiration_date
         run: echo "EXPIRES_AT=$(date -u --date '+14 days' +'%Y-%m-%dT%H:%M:%SZ')" >> "$GITHUB_ENV"
       - name: Create Neon Branch
-        id: create_neon_branch
+        id: neon
         uses: neondatabase/create-branch-action@v6
         with:
           project_id: ${{ vars.NEON_PROJECT_ID }}
           branch_name: ${{ needs.setup.outputs.preview_branch_name }}
           api_key: ${{ secrets.NEON_API_KEY }}
           expires_at: ${{ env.EXPIRES_AT }}
-      # DB URL logging removed for security
-      - name: Encode Neon Branch Outputs
-        id: create_neon_branch_encode
-        run: |
-          echo "db_url=$(echo '${{ steps.create_neon_branch.outputs.db_url }}' | base64 -w 0)" >> "$GITHUB_OUTPUT"
-          echo "db_url_with_pooler=$(echo '${{ steps.create_neon_branch.outputs.db_url_with_pooler }}' | base64 -w 0)" >> "$GITHUB_OUTPUT"
       - name: Checkout
         uses: actions/checkout@v4
       - name: Setup Node.js
@@ -80,22 +74,26 @@ jobs:
           node-version: "22"
       - name: Install dependencies
         run: npm ci
-      - name: Validate Neon Branch Creation
+      - name: Validate DATABASE_URL
+        shell: bash
         run: |
-          if [ -z "${{ steps.create_neon_branch_encode.outputs.db_url_with_pooler }}" ]; then
-            echo "ERROR: Neon branch creation failed - no database URL returned"
-            echo "Available outputs:"
-            echo "db_url: ${{ steps.create_neon_branch_encode.outputs.db_url }}"
-            echo "db_url_with_pooler: ${{ steps.create_neon_branch_encode.outputs.db_url_with_pooler }}"
-            exit 1
-          fi
-          echo "Neon branch created successfully"
-          echo "Database URL: ${{ steps.create_neon_branch_encode.outputs.db_url_with_pooler }}"
-      - name: Set DATABASE_URL
+          set -euo pipefail
+          DB_URL='${{ steps.neon.outputs.db_url_with_pooler }}'
+          test -n "$DB_URL" || { echo "DATABASE_URL is empty"; exit 1; }
+          case "$DB_URL" in
+            postgres://*|postgresql://*)
+              echo "DATABASE_URL protocol is valid"
+              ;;
+            *)
+              echo "DATABASE_URL protocol is invalid"
+              exit 1
+              ;;
+          esac
+      - name: Export DATABASE_URL
+        shell: bash
         run: |
-          DB_URL="${{ steps.create_neon_branch_encode.outputs.db_url_with_pooler }}"
-          echo "DATABASE_URL=$DB_URL" >> $GITHUB_ENV
-          echo "DATABASE_URL set to: $DB_URL"
+          set -euo pipefail
+          echo "DATABASE_URL=${{ steps.neon.outputs.db_url_with_pooler }}" >> "$GITHUB_ENV"
       - name: Generate Prisma Client
         run: npx prisma generate
         env:
@@ -133,6 +131,7 @@ jobs:
           curl -fsSL https://repo.neon.tech/install.sh | bash
           echo "$HOME/.neon/bin" >> $GITHUB_PATH
       - name: Delete Neon Branch if it exists
+        if: always()
         env:
           NEON_API_KEY: ${{ secrets.NEON_API_KEY }}
           PROJECT_ID: ${{ vars.NEON_PROJECT_ID }}
@@ -141,9 +140,7 @@ jobs:
         run: |
           set -euo pipefail
 
-          BRANCHES_JSON=$(neonctl branches list --project-id "$PROJECT_ID" --output json)
-
-          if echo "$BRANCHES_JSON" | grep -Fq "\"name\":\"$BRANCH_NAME\""; then
+          if neonctl branches list --project-id "$PROJECT_ID" | grep -Fq "$BRANCH_NAME"; then
             neonctl branches delete "$BRANCH_NAME" --project-id "$PROJECT_ID"
             echo "Deleted $BRANCH_NAME"
           else
