@@ -29,9 +29,8 @@ describe('Order API Contract Tests', () => {
 
     if (loginResponse.ok) {
       const loginData = await loginResponse.json();
-      console.log('Login response structure:', JSON.stringify(loginData, null, 2));
       authToken = loginData.token;
-      sellerId = loginData.user?.sellerId;
+      sellerId = loginData.user.sellerId;
       console.log('Auth setup successful, token acquired');
       console.log('Seller ID:', sellerId);
     } else {

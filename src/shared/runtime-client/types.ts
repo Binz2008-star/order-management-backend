@@ -1,18 +1,18 @@
 // === RUNTIME CLIENT TYPES ===
 // These types are used by sellora platform layer to communicate with runtime core
 
-import { 
-  CreateOrderInput, 
-  UpdateOrderInput, 
-  UpdateOrderStatusInput,
-  GetOrdersQuery,
-  CreatePaymentInput,
-  UpdatePaymentStatusInput,
-  RefundPaymentInput,
-  CreateCustomerInput,
+import {
   ApiResponse,
+  CreateCustomerInput,
+  CreateOrderInput,
+  CreatePaymentInput,
+  ErrorResponse,
+  GetOrdersQuery,
   OrderResponse,
-  ErrorResponse 
+  RefundPaymentInput,
+  UpdateOrderInput,
+  UpdateOrderStatusInput,
+  UpdatePaymentStatusInput
 } from '../schemas/orders';
 
 // === RUNTIME CLIENT INTERFACE ===
@@ -20,35 +20,48 @@ import {
 export interface RuntimeClient {
   // === ORDER OPERATIONS ===
   orders: {
-    create(data: CreateOrderInput): Promise<ApiResponse<{ order: OrderResponse }>>;
-    get(id: string): Promise<ApiResponse<{ order: OrderResponse }>>;
-    list(query: GetOrdersQuery): Promise<ApiResponse<{ orders: OrderResponse[]; pagination: any }>>;
-    update(id: string, data: UpdateOrderInput): Promise<ApiResponse<{ order: OrderResponse }>>;
-    updateStatus(id: string, data: UpdateOrderStatusInput): Promise<ApiResponse<{ order: OrderResponse }>>;
-    getEvents(id: string): Promise<ApiResponse<{ events: any[] }>>;
+    create(data: CreateOrderInput): Promise<ApiResponse>;
+    get(id: string): Promise<ApiResponse>;
+    list(query: GetOrdersQuery): Promise<ApiResponse>;
+    update(id: string, data: UpdateOrderInput): Promise<ApiResponse>;
+    updateStatus(id: string, data: UpdateOrderStatusInput): Promise<ApiResponse>;
+    getEvents(id: string): Promise<ApiResponse>;
   };
 
   // === PAYMENT OPERATIONS ===
   payments: {
-    create(orderId: string, data: CreatePaymentInput): Promise<ApiResponse<{ payment: any }>>;
-    get(id: string): Promise<ApiResponse<{ payment: any }>>;
-    list(query?: { orderId?: string }): Promise<ApiResponse<{ payments: any[] }>>;
-    updateStatus(id: string, data: UpdatePaymentStatusInput): Promise<ApiResponse<{ payment: any }>>;
-    refund(id: string, data: RefundPaymentInput): Promise<ApiResponse<{ payment: any }>>;
+    create(orderId: string, data: CreatePaymentInput): Promise<ApiResponse>;
+    get(id: string): Promise<ApiResponse>;
+    list(query?: { orderId?: string }): Promise<ApiResponse>;
+    updateStatus(id: string, data: UpdatePaymentStatusInput): Promise<ApiResponse>;
+    refund(id: string, data: RefundPaymentInput): Promise<ApiResponse>;
   };
 
   // === CUSTOMER OPERATIONS ===
   customers: {
-    create(data: CreateCustomerInput): Promise<ApiResponse<{ customer: any }>>;
-    get(id: string): Promise<ApiResponse<{ customer: any }>>;
-    list(query?: { page?: number; limit?: number }): Promise<ApiResponse<{ customers: any[] }>>;
+    create(data: CreateCustomerInput): Promise<ApiResponse>;
+    get(id: string): Promise<ApiResponse>;
+    list(query?: { sellerId?: string }): Promise<ApiResponse>;
+    update(id: string, data: Partial<CreateCustomerInput>): Promise<ApiResponse>;
   };
 
   // === AUTH OPERATIONS ===
   auth: {
-    login(credentials: { email: string; password: string }): Promise<ApiResponse<{ user: any; token: string }>>;
-    refresh(refreshToken: string): Promise<ApiResponse<{ token: string }>>;
-    me(): Promise<ApiResponse<{ user: any }>>;
+    login(credentials: { email: string; password: string }): Promise<ApiResponse>;
+    refresh(refreshToken: string): Promise<ApiResponse>;
+    logout(): Promise<ApiResponse>;
+  };
+
+  // === HEALTH OPERATIONS ===
+  health: {
+    check(): Promise<ApiResponse>;
+  };
+
+  // === WEBHOOK OPERATIONS ===
+  webhooks: {
+    create(config: { url: string; events: string[]; secret?: string }): Promise<ApiResponse>;
+    list(): Promise<ApiResponse>;
+    delete(id: string): Promise<ApiResponse>;
   };
 }
 
@@ -59,6 +72,7 @@ export interface RuntimeClientConfig {
   apiKey?: string;
   timeout?: number;
   retryAttempts?: number;
+  headers?: Record<string, string>;
 }
 
 // === ERROR TYPES ===
@@ -103,16 +117,8 @@ export interface RuntimeClientFactory {
 
 // === EXPORTS ===
 
-export type { 
-  CreateOrderInput,
-  UpdateOrderInput, 
-  UpdateOrderStatusInput,
-  GetOrdersQuery,
-  CreatePaymentInput,
-  UpdatePaymentStatusInput,
-  RefundPaymentInput,
-  CreateCustomerInput,
-  ApiResponse,
-  OrderResponse,
-  ErrorResponse 
+export type {
+  ApiResponse, CreateCustomerInput, CreateOrderInput, CreatePaymentInput, ErrorResponse, GetOrdersQuery, OrderResponse, RefundPaymentInput, UpdateOrderInput,
+  UpdateOrderStatusInput, UpdatePaymentStatusInput
 };
+

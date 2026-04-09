@@ -90,6 +90,10 @@ export const ApiResponseSchema = z.object({
   }).optional(),
 });
 
+export type ApiResponse<T = unknown> = z.infer<typeof ApiResponseSchema> & {
+  data?: T;
+};
+
 // Order response schema
 export const OrderResponseSchema = z.object({
   id: z.string().cuid(),
@@ -151,6 +155,5 @@ export type UpdatePaymentStatusInput = z.infer<typeof UpdatePaymentStatusSchema>
 export type RefundPaymentInput = z.infer<typeof RefundPaymentSchema>;
 export type CreateCustomerInput = z.infer<typeof CreateCustomerSchema>;
 export type CreateProductInput = z.infer<typeof CreateProductSchema>;
-export type ApiResponse = z.infer<typeof ApiResponseSchema>;
 export type OrderResponse = z.infer<typeof OrderResponseSchema>;
 export type ErrorResponse = z.infer<typeof ErrorResponseSchema>;
