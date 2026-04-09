@@ -80,12 +80,18 @@ jobs:
         run: |
           if [ -z "${{ steps.create_neon_branch.outputs.db_url_with_pooler }}" ]; then
             echo "ERROR: Neon branch creation failed - no database URL returned"
+            echo "Available outputs:"
+            echo "db_url: ${{ steps.create_neon_branch.outputs.db_url }}"
+            echo "db_url_with_pooler: ${{ steps.create_neon_branch.outputs.db_url_with_pooler }}"
             exit 1
           fi
           echo "Neon branch created successfully"
+          echo "Database URL: ${{ steps.create_neon_branch.outputs.db_url_with_pooler }}"
       - name: Set DATABASE_URL
         run: |
-          echo "DATABASE_URL=${{ steps.create_neon_branch.outputs.db_url_with_pooler }}" >> $GITHUB_ENV
+          DB_URL="${{ steps.create_neon_branch.outputs.db_url_with_pooler }}"
+          echo "DATABASE_URL=$DB_URL" >> $GITHUB_ENV
+          echo "DATABASE_URL set to: $DB_URL"
       - name: Generate Prisma Client
         run: npx prisma generate
         env:
