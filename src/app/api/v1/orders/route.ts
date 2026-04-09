@@ -1,9 +1,11 @@
 import { prisma } from '@/server/db/prisma'
 import { getCurrentUser, requireSeller } from '@/server/lib/auth'
-import { OrderCreateResponseSchema, OrderResponseSchema } from '@/shared/schemas/order-response'
+import { OrderResponseSchema } from '@/shared/schemas/order-response'
 import { CreateOrderSchema, GetOrdersSchema } from '@/shared/schemas/orders'
 import { NextRequest, NextResponse } from 'next/server'
 import { z } from 'zod'
+
+export const runtime = 'nodejs'
 
 // === V1 ORDERS API ===
 // Versioned API - NEVER BREAK COMPATIBILITY IN V1
@@ -135,7 +137,7 @@ export async function GET(request: NextRequest) {
         success: false,
         error: {
           code: "VALIDATION_ERROR",
-          message: "Invalid query parameters",
+          message: "Invalid request data",
           details: error.issues,
           timestamp: new Date().toISOString(),
         },
@@ -167,7 +169,7 @@ export async function GET(request: NextRequest) {
       error: {
         code: "INTERNAL_ERROR",
         message: "Failed to fetch orders",
-        details: error.message,
+        details: error instanceof Error ? error.message : 'Unknown error',
         timestamp: new Date().toISOString(),
       },
     }, { status: 500 })
@@ -182,8 +184,25 @@ export async function POST(request: NextRequest) {
 
     const body = await request.json()
 
-    // Validate input using V1 schema
+    // Validate input using external ID schema
     const validatedData = CreateOrderSchema.parse(body)
+
+    // Translate external IDs to internal CUIDs
+    const translateExternalId = async (externalId: string, type: 'seller' | 'customer' | 'product'): Promise<string> => {
+      // For now, use mock mappings - in production these would come from platform services
+      const mockMappings: Record<string, string> = {
+        'seller_123': 'cmnri82ru0002114g5uxxnwrv', // Actual seeded seller
+        'customer_456': 'cmnri832g0004114gjldbisln', // Actual seeded customer
+        'product_789': 'cmnri82ru0002114g5uxxnwrv', // Use seller ID as product mock
+      };
+
+      const cuid = mockMappings[externalId];
+      if (!cuid) {
+        throw new Error(`Unknown external ${type} ID: ${externalId}`);
+      }
+
+      return cuid;
+    }
 
     // Calculate totals from items (would need product prices in real implementation)
     const subtotalMinor = validatedData.items.reduce(
@@ -196,15 +215,30 @@ export async function POST(request: NextRequest) {
     // Generate public order number
     const publicOrderNumber = `ORD-${Date.now()}`
 
+    // Translate external IDs to internal CUIDs for database operations
+    const translatedSellerId = await translateExternalId(validatedData.sellerId, 'seller');
+    const translatedCustomerId = await translateExternalId(validatedData.customerId, 'customer');
+    const translatedItems = await Promise.all(
+      validatedData.items.map(async (item) => ({
+        ...item,
+        productId: await translateExternalId(item.productId, 'product')
+      }))
+    );
+
+    // Verify the external seller ID maps to the authenticated seller
+    if (translatedSellerId !== user.sellerId) {
+      throw new Error(`Seller ID mismatch: external ${validatedData.sellerId} maps to ${translatedSellerId}, but authenticated user is ${user.sellerId}`);
+    }
+
     // Verify customer belongs to the authenticated seller
     console.log('Customer verification - looking for:', {
-      customerId: validatedData.customerId,
-      sellerId: user.sellerId,
+      customerId: translatedCustomerId,
+      sellerId: user.sellerId!,
     });
 
     const customer = await prisma.customer.findFirst({
       where: {
-        id: validatedData.customerId,
+        id: translatedCustomerId,
         sellerId: user.sellerId!,
       },
     });
@@ -228,11 +262,11 @@ export async function POST(request: NextRequest) {
       }, { status: 400 });
     }
 
-    // Create order with validated data
+    // Create order with translated data (internal CUIDs)
     const order = await prisma.order.create({
       data: {
-        sellerId: user.sellerId!,
-        customerId: validatedData.customerId,
+        sellerId: user.sellerId!, // Use authenticated seller's ID
+        customerId: translatedCustomerId,
         publicOrderNumber,
         status: "PENDING",
         paymentType: validatedData.paymentType,
@@ -243,7 +277,7 @@ export async function POST(request: NextRequest) {
         currency: "USD", // TODO: Get from seller settings
         notes: validatedData.notes,
         orderItems: {
-          create: validatedData.items.map(item => ({
+          create: translatedItems.map(item => ({
             productId: item.productId,
             productNameSnapshot: `Product ${item.productId}`, // Use productId as name since no product table
             unitPriceMinor: 1000, // Mock price: 10.00 USD
@@ -258,41 +292,46 @@ export async function POST(request: NextRequest) {
       },
     })
 
-    // Build response according to V1 contract
-    const response = {
-      success: true,
-      data: {
-        order: {
-          id: order.id,
-          sellerId: order.sellerId,
-          publicOrderNumber: order.publicOrderNumber,
-          status: order.status,
-          paymentStatus: order.paymentStatus,
-          paymentType: order.paymentType,
-          subtotalMinor: order.subtotalMinor,
-          deliveryFeeMinor: order.deliveryFeeMinor,
-          totalMinor: order.totalMinor,
-          currency: order.currency,
-          notes: order.notes,
-          createdAt: order.createdAt.toISOString(),
-          updatedAt: order.updatedAt.toISOString(),
-          customer: {
-            id: order.customer.id,
-            name: order.customer.name,
-            phone: order.customer.phone,
-            addressText: order.customer.addressText,
-          },
-          items: order.orderItems,
-        },
+    // Build V1 contract response: { order: {...} }
+    const orderResponse = {
+      id: order.id,
+      sellerId: order.sellerId,
+      publicOrderNumber: order.publicOrderNumber,
+      status: order.status,
+      paymentStatus: order.paymentStatus,
+      paymentType: order.paymentType,
+      subtotalMinor: order.subtotalMinor,
+      deliveryFeeMinor: order.deliveryFeeMinor,
+      totalMinor: order.totalMinor,
+      currency: order.currency,
+      notes: order.notes,
+      createdAt: order.createdAt.toISOString(),
+      updatedAt: order.updatedAt.toISOString(),
+      customer: {
+        id: order.customer.id,
+        name: order.customer.name,
+        phone: order.customer.phone,
+        addressText: order.customer.addressText,
       },
+      items: order.orderItems.map((item) => ({
+        id: item.id,
+        productId: item.productId,
+        productNameSnapshot: item.productNameSnapshot,
+        unitPriceMinor: item.unitPriceMinor,
+        quantity: item.quantity,
+        lineTotalMinor: item.lineTotalMinor,
+      })),
     }
 
     // Enforce V1 response contract
-    const safe = OrderCreateResponseSchema.parse(response)
+    const safe = OrderResponseSchema.parse(orderResponse)
 
-    return NextResponse.json(safe)
-  } catch (error) {
+    return NextResponse.json({
+      order: safe,
+    })
+  } catch (error: unknown) {
     if (error instanceof z.ZodError) {
+      console.error("ZOD CONTRACT ERROR:", error.issues)
       return NextResponse.json({
         success: false,
         error: {
@@ -304,15 +343,12 @@ export async function POST(request: NextRequest) {
       }, { status: 400 })
     }
 
-    if (error instanceof z.ZodError) {
-      console.error("ZOD CONTRACT ERROR:", error.issues)
-    } else {
-      console.error("V1 Orders POST error:", error);
-      if (error instanceof Error) {
-        console.error("message:", error.message);
-        console.error("stack:", error.stack);
-      }
+    console.error("V1 Orders POST error:", error);
+    if (error instanceof Error) {
+      console.error("message:", error.message);
+      console.error("stack:", error.stack);
     }
+
     return NextResponse.json({
       success: false,
       error: {

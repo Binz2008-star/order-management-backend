@@ -1,7 +1,6 @@
 // === API GATEWAY CLIENT ===
 // Centralizes all HTTP policy, auth, retries, and error handling
 
-import { z } from "zod";
 import { ErrorSchema, isApiError } from "../schemas/error";
 
 // === CLIENT CONFIGURATION ===
@@ -40,7 +39,7 @@ export class GatewayClient {
 
   // === CORE HTTP METHOD ===
 
-  private async request<T>(
+  protected async request<T>(
     path: string,
     method: string,
     options: GatewayRequestOptions = {}
@@ -122,7 +121,7 @@ export class GatewayClient {
         const status = (error as any).status;
         if (
           (status && status >= 400 && status < 500) ||
-          error.name === "AbortError" ||
+          (error as Error).name === "AbortError" ||
           error instanceof GatewayError
         ) {
           throw error;
@@ -262,7 +261,7 @@ export class MiddlewareGatewayClient extends GatewayClient {
     this.middlewares.push(middleware);
   }
 
-  private async request<T>(
+  protected async request<T>(
     path: string,
     method: string,
     options: GatewayRequestOptions = {}

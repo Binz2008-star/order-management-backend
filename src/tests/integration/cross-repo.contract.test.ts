@@ -38,7 +38,8 @@ const ListOrdersResponseSchema = z.object({
 
 // Test configuration
 const RUNTIME_API_URL = process.env.RUNTIME_API_URL || "http://localhost:3000";
-const TEST_SELLER_TOKEN = process.env.TEST_SELLER_TOKEN || "test-token";
+// Get a real token for testing
+const TEST_SELLER_TOKEN = process.env.TEST_SELLER_TOKEN || "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpZCI6ImNtbnJpODJoNzAwMDAxMTRnMDJoZXU0azYiLCJlbWFpbCI6ImRlbW9Ac2VsbGVyLmNvbSIsInJvbGUiOiJTRUxMRVIiLCJzZWxsZXJJZCI6ImNtbnJpODJydTAwMDIxMTRnNXV4eG53cnYiLCJpYXQiOjE3NzU3NDA4MjQsImV4cCI6MTc3NjM0NTYyNH0.7563tWJYe2-TPC_-3sMPRZYh-DsAe4PqUwfPVJjNaSg";
 
 describe("Cross-Repo Contract Tests", () => {
   let gatewayClient: GatewayClient;
@@ -90,8 +91,8 @@ describe("Cross-Repo Contract Tests", () => {
     test("runtime response matches sellora expectations", () => {
       // This simulates what runtime would return
       const runtimeResponse = {
-        id: "ord_123",
-        sellerId: "seller_123",
+        id: "cmnrc36r00002pn1yeyixi1sn",
+        sellerId: "cmnrc36r00002pn1yeyixi1sn",
         publicOrderNumber: "ORD-123",
         status: "PENDING",
         paymentStatus: "PENDING",
@@ -104,15 +105,15 @@ describe("Cross-Repo Contract Tests", () => {
         createdAt: "2023-12-01T10:00:00Z",
         updatedAt: "2023-12-01T10:00:00Z",
         customer: {
-          id: "customer_456",
+          id: "cmnrc36r00002pn1yeyixi1sn",
           name: "John Doe",
           phone: "+1234567890",
           addressText: "123 Main St",
         },
         items: [
           {
-            id: "item_123",
-            productId: "product_789",
+            id: "cmnrc36r00002pn1yeyixi1sn",
+            productId: "cmnrc36r00002pn1yeyixi1sn",
             productNameSnapshot: "Test Product",
             unitPriceMinor: 1000,
             quantity: 2,
@@ -125,25 +126,35 @@ describe("Cross-Repo Contract Tests", () => {
       expect(() => OrderResponseSchema.parse(runtimeResponse)).not.toThrow();
 
       const validated = OrderResponseSchema.parse(runtimeResponse);
-      expect(validated.id).toBe("ord_123");
+      expect(validated.id).toBe("cmnrc36r00002pn1yeyixi1sn");
       expect(validated.status).toBe("PENDING");
       expect(validated.items).toHaveLength(1);
     });
   });
 
   describe("Live Integration Tests", () => {
-    test("end-to-end order creation flow", async () => {
+    test("end-to-end order creation and retrieval flow", async () => {
+      // Step 0: Log seller ID from token for verification
+      const jwt = require('jsonwebtoken');
+      const token = TEST_SELLER_TOKEN;
+      const decoded = jwt.decode(token, 'dev-secret-32-characters-minimum-for-security');
+      console.log("DEBUG: Seller ID from token:", decoded.sellerId);
+      console.log("DEBUG: User ID from token:", decoded.id);
+
       const orderData = CreateOrderSchema.parse({
-        sellerId: "test-seller",
-        customerId: "test-customer",
+        sellerId: "seller_123", // External ID format
+        customerId: "customer_456", // External ID format
         items: [
           {
-            productId: "test-product",
-            quantity: 1,
+            productId: "product_789", // External ID format
+            quantity: 2,
           },
         ],
         paymentType: "CASH_ON_DELIVERY",
+        notes: "Test order from sellora",
       });
+
+      console.log("DEBUG: Order data for creation:", JSON.stringify(orderData, null, 2));
 
       // Create order via runtime API
       const createResponse = await gatewayClient.post("/api/v1/orders", orderData);
@@ -154,23 +165,48 @@ describe("Cross-Repo Contract Tests", () => {
       expect(validatedCreateResponse.data.order).toBeDefined();
 
       // Validate order data contract
-      const order = validatedCreateResponse.data.order;
-      expect(order.id).toBeDefined();
-      expect(order.status).toMatch(/^(PENDING|CONFIRMED|PREPARING|READY|COMPLETED|CANCELLED)$/);
-      expect(order.paymentStatus).toMatch(/^(PENDING|PAID|FAILED|REFUNDED)$/);
+      const createdOrder = validatedCreateResponse.data.order;
+      expect(createdOrder.id).toBeDefined();
+      expect(createdOrder.status).toMatch(/^(PENDING|CONFIRMED|PREPARING|READY|COMPLETED|CANCELLED)$/);
+      expect(createdOrder.paymentStatus).toMatch(/^(PENDING|PAID|FAILED|REFUNDED)$/);
 
-      // Store for cleanup
-      createdOrderId = order.id;
-    });
+      // Step 1: Log created order ID
+      console.log("DEBUG: STEP 1 - Created order ID:", createdOrder.id);
+      console.log("DEBUG: STEP 1 - Created order sellerId:", createdOrder.sellerId);
+      console.log("DEBUG: STEP 1 - Created order full data:", JSON.stringify(createdOrder, null, 2));
 
-    test("order retrieval flow", async () => {
-      if (!createdOrderId) {
-        console.warn("No created order ID available, skipping retrieval test");
-        return;
+      // Step 2: Query DB immediately after create to confirm row exists
+      const { PrismaClient } = require('@prisma/client');
+      const prisma = new PrismaClient();
+      const dbOrderAfterCreate = await prisma.order.findUnique({
+        where: { id: createdOrder.id },
+        include: { customer: true, orderItems: true }
+      });
+      console.log("DEBUG: STEP 2 - DB query after create - Order exists:", !!dbOrderAfterCreate);
+      if (dbOrderAfterCreate) {
+        console.log("DEBUG: STEP 2 - DB order sellerId:", dbOrderAfterCreate.sellerId);
+        console.log("DEBUG: STEP 2 - DB order customerId:", dbOrderAfterCreate.customerId);
       }
 
+      // Step 3: Now test retrieval in the same test flow
+      console.log("DEBUG: STEP 3 - Attempting to fetch order ID:", createdOrder.id);
+
+      // Step 4: Query DB immediately before retrieval to confirm row still exists
+      const dbOrderBeforeRetrieve = await prisma.order.findUnique({
+        where: { id: createdOrder.id }
+      });
+      console.log("DEBUG: STEP 4 - DB query before retrieval - Order exists:", !!dbOrderBeforeRetrieve);
+
       // Get order via runtime API
-      const getResponse = await gatewayClient.get(`/api/v1/orders/${createdOrderId}`);
+      let getResponse;
+      try {
+        getResponse = await gatewayClient.get(`/api/v1/orders/${createdOrder.id}`);
+        console.log("DEBUG: STEP 5 - Retrieval successful");
+      } catch (error) {
+        console.log("DEBUG: STEP 5 - Retrieval failed with error:", error instanceof Error ? error.message : String(error));
+        console.log("DEBUG: STEP 5 - Error details:", JSON.stringify(error instanceof Error ? error.message : error, null, 2));
+        throw error;
+      }
 
       // Validate response contract
       const validatedGetResponse = GetOrderResponseSchema.parse(getResponse);
@@ -178,8 +214,27 @@ describe("Cross-Repo Contract Tests", () => {
       expect(validatedGetResponse.data.order).toBeDefined();
 
       // Validate order data contract
-      const order = validatedGetResponse.data.order;
-      expect(order.id).toBe(createdOrderId);
+      const retrievedOrder = validatedGetResponse.data.order;
+      expect(retrievedOrder.id).toBeDefined();
+      expect(retrievedOrder.status).toMatch(/^(PENDING|CONFIRMED|PREPARING|READY|COMPLETED|CANCELLED)$/);
+      expect(retrievedOrder.paymentStatus).toMatch(/^(PENDING|PAID|FAILED|REFUNDED)$/);
+
+      // Step 6: Log exact ID used in retrieval and compare
+      console.log("DEBUG: STEP 6 - Retrieved order ID:", retrievedOrder.id);
+      console.log("DEBUG: STEP 6 - Retrieved order sellerId:", retrievedOrder.sellerId);
+      console.log("DEBUG: STEP 6 - Retrieved order full data:", JSON.stringify(retrievedOrder, null, 2));
+
+      // Validate contract consistency - same order returned
+      expect(retrievedOrder.id).toBe(createdOrder.id);
+      expect(retrievedOrder.sellerId).toBe(createdOrder.sellerId);
+      expect(retrievedOrder.publicOrderNumber).toBe(createdOrder.publicOrderNumber);
+
+      console.log("DEBUG: FINAL - Successfully retrieved order:", retrievedOrder.id);
+
+      await prisma.$disconnect();
+
+      // Store for cleanup
+      createdOrderId = createdOrder.id;
     });
 
     test("order listing flow", async () => {
@@ -252,8 +307,8 @@ describe("Cross-Repo Contract Tests", () => {
   describe("Data Type Consistency", () => {
     test("numeric fields are properly typed", () => {
       const orderResponse = {
-        id: "ord_123",
-        sellerId: "seller_123",
+        id: "cmnrc36r00002pn1yeyixi1sn",
+        sellerId: "cmnrc36r00002pn1yeyixi1sn",
         publicOrderNumber: "ORD-123",
         status: "PENDING",
         paymentStatus: "PENDING",
@@ -266,15 +321,15 @@ describe("Cross-Repo Contract Tests", () => {
         createdAt: "2023-12-01T10:00:00Z",
         updatedAt: "2023-12-01T10:00:00Z",
         customer: {
-          id: "customer_456",
+          id: "cmnrc36r00002pn1yeyixi1sn",
           name: "John Doe",
           phone: "+1234567890",
           addressText: "123 Main St",
         },
         items: [
           {
-            id: "item_123",
-            productId: "product_789",
+            id: "cmnrc36r00002pn1yeyixi1sn",
+            productId: "cmnrc36r00002pn1yeyixi1sn",
             productNameSnapshot: "Test Product",
             unitPriceMinor: 1000,
             quantity: 2,
@@ -301,8 +356,8 @@ describe("Cross-Repo Contract Tests", () => {
 
     test("enum fields are properly constrained", () => {
       const orderResponse = {
-        id: "ord_123",
-        sellerId: "seller_123",
+        id: "cmnrc36r00002pn1yeyixi1sn",
+        sellerId: "cmnrc36r00002pn1yeyixi1sn",
         publicOrderNumber: "ORD-123",
         status: "PENDING",
         paymentStatus: "PENDING",
@@ -315,7 +370,7 @@ describe("Cross-Repo Contract Tests", () => {
         createdAt: "2023-12-01T10:00:00Z",
         updatedAt: "2023-12-01T10:00:00Z",
         customer: {
-          id: "customer_456",
+          id: "cmnrc36r00002pn1yeyixi1sn",
           name: "John Doe",
           phone: "+1234567890",
           addressText: "123 Main St",
@@ -357,7 +412,7 @@ describe("Cross-Repo Contract Tests", () => {
       const responses = await Promise.all(requests);
 
       // All requests should succeed
-      responses.forEach(response => {
+      responses.forEach((response: any) => {
         expect(response.success).toBe(true);
         expect(response.data.orders).toBeDefined();
       });

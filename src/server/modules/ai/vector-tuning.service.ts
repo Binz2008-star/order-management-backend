@@ -9,7 +9,7 @@ export interface VectorIndexConfig {
 }
 
 export class VectorTuningService {
-  constructor(private prisma: PrismaClient) {}
+  constructor(private prisma: PrismaClient) { }
 
   async getOptimalIndexConfig(sellerId: string): Promise<VectorIndexConfig> {
     const stats = await this.getSellerVectorStats(sellerId);
@@ -93,15 +93,15 @@ export class VectorTuningService {
   async dropOldIndexes(sellerId: string, keepLatest: number = 2) {
     // Get all indexes for this seller
     const indexes = await this.prisma.$queryRaw`
-      SELECT indexname 
-      FROM pg_indexes 
-      WHERE tablename = 'ai_document_chunks' 
+      SELECT indexname
+      FROM pg_indexes
+      WHERE tablename = 'ai_document_chunks'
         AND indexname LIKE 'ai_chunks_${sellerId}%'
       ORDER BY indexname DESC
     `;
 
     const indexNames = (indexes as any[]).map(idx => idx.indexname);
-    
+
     // Keep only the latest N indexes
     const toDrop = indexNames.slice(keepLatest);
 
@@ -125,14 +125,14 @@ export class VectorTuningService {
   async getIndexPerformanceMetrics(sellerId: string) {
     // Get index usage statistics
     const indexStats = await this.prisma.$queryRaw`
-      SELECT 
+      SELECT
         schemaname,
         tablename,
         indexname,
         idx_scan,
         idx_tup_read,
         idx_tup_fetch
-      FROM pg_stat_user_indexes 
+      FROM pg_stat_user_indexes
       WHERE tablename = 'ai_document_chunks'
         AND indexname LIKE '%${sellerId}%'
     `;
@@ -146,26 +146,26 @@ export class VectorTuningService {
 
     // Check if current index type matches optimal
     const currentIndexes = await this.prisma.$queryRaw`
-      SELECT indexdef 
-      FROM pg_indexes 
-      WHERE tablename = 'ai_document_chunks' 
+      SELECT indexdef
+      FROM pg_indexes
+      WHERE tablename = 'ai_document_chunks'
         AND indexname LIKE '%${sellerId}%'
       LIMIT 1
     `;
 
-    if (currentIndexes.length === 0) {
+    if ((currentIndexes as any[]).length === 0) {
       return true; // No index exists
     }
 
     const currentIndexDef = (currentIndexes as any[])[0]?.indexdef || '';
-    
+
     // Check if we should switch from IVFFlat to HNSW
     if (stats.totalChunks > 1000000 && currentIndexDef.includes('ivfflat')) {
       return true;
     }
 
     // Check if lists parameter needs adjustment
-    if (config.indexType === 'IVFFlat' && config.lists) {
+    if (config.indexType === 'IVFFLAT' && config.lists) {
       const currentLists = this.extractListsFromIndexDef(currentIndexDef);
       if (Math.abs(currentLists - config.lists) > config.lists * 0.2) {
         return true; // Difference > 20%
@@ -185,7 +185,7 @@ export class VectorTuningService {
       const newIndexName = await this.createOptimizedIndex(sellerId);
       await this.dropOldIndexes(sellerId);
       await this.optimizeIndexPerformance(sellerId);
-      
+
       return {
         reindexed: true,
         newIndexName,

@@ -2,14 +2,32 @@ import { z } from "zod";
 
 // === ORDER SCHEMAS ===
 
-// Base order schema for validation
+// External ID schema - accepts human-readable format at boundary
+const externalIdSchema = z.string().regex(/^[a-z]+_[0-9]+$/, "External ID must be in format 'prefix_number'");
+
+// Internal CUID schema - for database operations
+const cuidSchema = z.string().cuid();
+
+// API contract schema - accepts external IDs, validates at boundary
 export const CreateOrderSchema = z.object({
-  sellerId: z.string().cuid(),
-  customerId: z.string().cuid(),
+  sellerId: externalIdSchema,
+  customerId: externalIdSchema,
   items: z.array(z.object({
-    productId: z.string().cuid(),
+    productId: externalIdSchema,
     quantity: z.number().int().positive().max(999),
   })).min(1, "At least one item is required"),
+  paymentType: z.enum(["CASH_ON_DELIVERY", "CARD", "WALLET"]),
+  notes: z.string().optional(),
+});
+
+// Internal schema - for database operations with CUIDs only
+export const CreateOrderInternalSchema = z.object({
+  sellerId: cuidSchema,
+  customerId: cuidSchema,
+  items: z.array(z.object({
+    productId: cuidSchema,
+    quantity: z.number().int().positive().max(999),
+  })),
   paymentType: z.enum(["CASH_ON_DELIVERY", "CARD", "WALLET"]),
   notes: z.string().optional(),
 });
@@ -29,7 +47,7 @@ export const UpdateOrderStatusSchema = z.object({
 export const GetOrdersSchema = z.object({
   page: z.coerce.number().int().positive().default(1),
   limit: z.coerce.number().int().positive().max(100).default(20),
-  status: z.enum(["PENDING", "CONFIRMED", "PREPARING", "READY", "COMPLETED", "CANCELLED"]).optional(),
+  status: z.enum(["PENDING", "CONFIRMED", "PACKED", "OUT_FOR_DELIVERY", "DELIVERED", "CANCELLED"]).optional(),
   paymentStatus: z.enum(["PENDING", "PAID", "FAILED", "REFUNDED"]).optional(),
   customerId: z.string().cuid().optional(),
 });

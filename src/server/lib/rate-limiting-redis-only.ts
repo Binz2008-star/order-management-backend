@@ -36,7 +36,6 @@ export class RedisOnlyRateLimiter {
     }
 
     this.redis = new Redis(redisUrl, {
-      retryDelayOnFailover: 100,
       maxRetriesPerRequest: 3,
       lazyConnect: true,
       // Enable command timeout to fail fast on Redis issues
@@ -46,7 +45,7 @@ export class RedisOnlyRateLimiter {
       // Fail fast on connection issues
       connectTimeout: 5000,
     });
-    
+
     this.defaultConfig = defaultConfig;
 
     // Set up error handling - NO fallback to memory
@@ -88,7 +87,7 @@ export class RedisOnlyRateLimiter {
 
     try {
       const results = await pipeline.exec();
-      
+
       if (!results) {
         throw new Error("Redis pipeline failed - rate limiting unavailable");
       }
@@ -126,7 +125,7 @@ export class RedisOnlyRateLimiter {
 
   middleware(config: RedisRateLimitConfig) {
     return async (request: NextRequest): Promise<RedisRateLimitResult> => {
-      const key = config.keyGenerator 
+      const key = config.keyGenerator
         ? config.keyGenerator(request)
         : this.generateKey(request);
 
@@ -244,11 +243,11 @@ export class RedisOnlyRateLimiter {
     try {
       const info = await this.redis.info("memory clients keyspace");
       const lines = info.split("\r\n");
-      
+
       const memory = lines.find(line => line.startsWith("used_memory_human:"))?.split(":")[1] || "unknown";
       const clients = parseInt(lines.find(line => line.startsWith("connected_clients:"))?.split(":")[1] || "0");
       const keys = parseInt(lines.find(line => line.startsWith("db0:keys="))?.split(":")[1]?.split(",")[0]?.split("=")[1] || "0");
-      
+
       return {
         connected: true,
         memory,
@@ -277,7 +276,7 @@ export class ProductionRateLimitingMiddleware {
     if (!redisUrl) {
       throw new Error("REDIS_URL is required for production rate limiting");
     }
-    
+
     this.limiter = new RedisOnlyRateLimiter(redisUrl);
   }
 
@@ -325,11 +324,11 @@ export function getProductionRateLimitConfig(): {
   redisUrl: string;
 } {
   const redisUrl = process.env.REDIS_URL || process.env.UPSTASH_REDIS_REST_URL;
-  
+
   if (!redisUrl) {
     throw new Error("REDIS_URL environment variable is required for production rate limiting");
   }
-  
+
   return { redisUrl };
 }
 
@@ -346,12 +345,12 @@ export class RateLimitingUnavailableError extends Error {
 
 export function validateRateLimitingSetup(): void {
   const redisUrl = process.env.REDIS_URL || process.env.UPSTASH_REDIS_REST_URL;
-  
+
   if (!redisUrl) {
     throw new RateLimitingUnavailableError(
       "Rate limiting is not configured. Set REDIS_URL environment variable."
     );
   }
-  
+
   console.log("Production rate limiting configured with Redis");
 }

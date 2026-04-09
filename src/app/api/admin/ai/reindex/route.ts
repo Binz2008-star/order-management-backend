@@ -1,8 +1,8 @@
-import { NextRequest, NextResponse } from 'next/server';
-import { PrismaClient } from '@prisma/client';
-import { AiPolicyService } from '@/server/modules/ai/policy.service';
 import { DocumentService } from '@/server/modules/ai/document.service';
 import { EmbeddingService } from '@/server/modules/ai/embedding.service';
+import { AiPolicyService } from '@/server/modules/ai/policy.service';
+import { PrismaClient } from '@prisma/client';
+import { NextRequest, NextResponse } from 'next/server';
 
 const prisma = new PrismaClient();
 const policyService = new AiPolicyService(prisma);
@@ -75,7 +75,7 @@ async function processIndexingJob(jobId: string) {
     }
 
     const payload = JSON.parse(job.payloadJson || '{}');
-    
+
     switch (job.jobType) {
       case 'FULL_REINDEX':
         await performFullReindex(job.sellerId);
@@ -97,7 +97,7 @@ async function processIndexingJob(jobId: string) {
     });
   } catch (error) {
     console.error(`Indexing job ${jobId} failed:`, error);
-    
+
     // Mark job as failed
     await prisma.aiIndexJob.update({
       where: { id: jobId },
@@ -113,7 +113,7 @@ async function processIndexingJob(jobId: string) {
 async function performFullReindex(sellerId: string) {
   // Index products
   await indexProducts(sellerId);
-  
+
   // Index other content types can be added here
   // await indexPolicies(sellerId);
   // await indexFAQs(sellerId);
@@ -123,7 +123,7 @@ async function indexProducts(sellerId: string) {
   // Get all products for the seller
   const products = await prisma.$queryRaw`
     SELECT id, name, description, category, brand, sku, price, currency
-    FROM products 
+    FROM products
     WHERE seller_id = ${sellerId}
   `;
 
@@ -138,9 +138,20 @@ async function indexProducts(sellerId: string) {
 
       // Create chunks
       const chunks = await documentService.chunkDocument(document.id);
-      
+
+      // Map chunks to expected format for storeEmbeddings
+      const mappedChunks = chunks.map((chunk: any) => ({
+        content: chunk.content,
+        index: chunk.chunkIndex,
+        metadata: {
+          documentId: chunk.documentId,
+          sellerId: chunk.sellerId,
+          tokenCount: chunk.tokenCount,
+        }
+      }));
+
       // Generate and store embeddings
-      await embeddingService.storeEmbeddings(document.id, sellerId, chunks);
+      await embeddingService.storeEmbeddings(document.id, sellerId, mappedChunks);
     } catch (error) {
       console.error(`Failed to index product ${product.id}:`, error);
     }
@@ -149,7 +160,7 @@ async function indexProducts(sellerId: string) {
 
 async function performDocumentUpsert(sellerId: string, payload: any) {
   const { sourceType, sourceId } = payload;
-  
+
   if (!sourceType || !sourceId) {
     throw new Error('sourceType and sourceId are required for UPSERT_DOCUMENT');
   }
@@ -167,7 +178,7 @@ async function performDocumentUpsert(sellerId: string, payload: any) {
 async function upsertProductDocument(sellerId: string, productId: string) {
   const product = await prisma.$queryRaw`
     SELECT id, name, description, category, brand, sku, price, currency
-    FROM products 
+    FROM products
     WHERE seller_id = ${sellerId} AND id = ${productId}
   `;
 
@@ -176,7 +187,7 @@ async function upsertProductDocument(sellerId: string, productId: string) {
   }
 
   const productData = (product as any[])[0];
-  
+
   // Create or update AI document
   const document = await documentService.createDocumentFromSource(
     sellerId,
@@ -186,14 +197,25 @@ async function upsertProductDocument(sellerId: string, productId: string) {
 
   // Create chunks
   const chunks = await documentService.chunkDocument(document.id);
-  
+
+  // Map chunks to expected format for storeEmbeddings
+  const mappedChunks = chunks.map((chunk: any) => ({
+    content: chunk.content,
+    index: chunk.chunkIndex,
+    metadata: {
+      documentId: chunk.documentId,
+      sellerId: chunk.sellerId,
+      tokenCount: chunk.tokenCount,
+    }
+  }));
+
   // Generate and store embeddings
-  await embeddingService.storeEmbeddings(document.id, sellerId, chunks);
+  await embeddingService.storeEmbeddings(document.id, sellerId, mappedChunks);
 }
 
 async function performDocumentDelete(sellerId: string, payload: any) {
   const { sourceType, sourceId } = payload;
-  
+
   if (!sourceType || !sourceId) {
     throw new Error('sourceType and sourceId are required for DELETE_DOCUMENT');
   }

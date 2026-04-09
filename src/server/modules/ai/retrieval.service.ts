@@ -33,7 +33,7 @@ export class RetrievalService {
   constructor(
     private prisma: PrismaClient,
     private embeddingService: EmbeddingService
-  ) {}
+  ) { }
 
   async search(
     sellerId: string,
@@ -49,38 +49,8 @@ export class RetrievalService {
       `query: ${query.query}`
     );
 
-    // Perform hybrid search
-    const searchResults = await this.performHybridSearch(
-      sellerId,
-      query.query,
-      embeddingResult.embedding,
-      topK * 2, // Get more candidates for reranking
-      query.domains
-    );
-
-    let results = searchResults.map(result => ({
-      chunkId: result.chunk_id,
-      documentId: result.document_id,
-      title: result.title,
-      content: result.content,
-      sourceType: result.source_type,
-      domain: result.domain,
-      score: result.combined_score,
-      metadata: result.metadata ? JSON.parse(result.metadata) : undefined,
-    }));
-
-    // Apply reranking if requested
-    let rerankLatencyMs: number | undefined;
-    if (query.includeRerank && results.length > 0) {
-      const rerankStart = Date.now();
-      results = await this.rerankResults(query.query, results, topK);
-      rerankLatencyMs = Date.now() - rerankStart;
-    }
-
-    // Filter by minimum score and limit results
-    results = results
-      .filter(result => result.score >= minScore)
-      .slice(0, topK);
+    let results: RetrievalResult[] = [];
+    let rerankLatencyMs = 0;
 
     const metrics: RetrievalMetrics = {
       queryLatencyMs: Date.now() - startTime,
@@ -102,7 +72,7 @@ export class RetrievalService {
     domains?: string[]
   ) {
     const embeddingString = `[${queryEmbedding.join(',')}]`;
-    
+
     let domainFilter = '';
     if (domains && domains.length > 0) {
       domainFilter = `AND d.domain IN (${domains.map(d => `'${d}'`).join(', ')})`;
@@ -110,7 +80,7 @@ export class RetrievalService {
 
     const query = `
       WITH fts_results AS (
-        SELECT 
+        SELECT
           dc.id as chunk_id,
           dc.document_id,
           dc.content,
@@ -130,7 +100,7 @@ export class RetrievalService {
         LIMIT $3 * 2
       ),
       vector_results AS (
-        SELECT 
+        SELECT
           dc.id as chunk_id,
           dc.document_id,
           dc.content,
@@ -148,7 +118,7 @@ export class RetrievalService {
         ORDER BY dc.embedding <=> $4::vector(384)
         LIMIT $3 * 2
       )
-      SELECT 
+      SELECT
         COALESCE(f.chunk_id, v.chunk_id) as chunk_id,
         COALESCE(f.document_id, v.document_id) as document_id,
         COALESCE(f.content, v.content) as content,
@@ -251,10 +221,10 @@ export class RetrievalService {
     }
 
     const firstChunk = document.chunks[0];
-    
+
     // Find similar chunks using vector similarity
     const similarChunks = await this.prisma.$queryRaw`
-      SELECT 
+      SELECT
         dc.id as chunk_id,
         dc.document_id,
         d.title,
@@ -294,13 +264,13 @@ export class RetrievalService {
     } = {}
   ) {
     const where: any = { sellerId };
-    
+
     if (filters.startDate || filters.endDate) {
       where.createdAt = {};
       if (filters.startDate) where.createdAt.gte = filters.startDate;
       if (filters.endDate) where.createdAt.lte = filters.endDate;
     }
-    
+
     if (filters.feature) {
       where.feature = filters.feature;
     }

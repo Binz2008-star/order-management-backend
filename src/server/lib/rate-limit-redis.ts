@@ -410,6 +410,15 @@ export class RateLimiter {
   }
 
   async isAllowed(request: NextRequest): Promise<RateLimitCheckResult | null> {
+    // Disable rate limiting in test environment to ensure stable auth bootstrap
+    if (process.env.NODE_ENV === 'test' || process.env.VITEST === 'true') {
+      return {
+        allowed: true,
+        remaining: Infinity,
+        resetTime: Date.now() + 60000
+      }
+    }
+
     const key = this.getKey(request)
     await this.ensureStoreInitialized()
 

@@ -69,8 +69,8 @@ export class SimpleAIWorker {
       console.log(`Job ${job.id} completed:`, result);
     });
 
-    this.worker.on("failed", (job: Job, err: Error) => {
-      console.error(`Job ${job.id} failed:`, err.message);
+    this.worker.on("failed", (job: Job | undefined, err: Error) => {
+      console.error(`Job ${job?.id || 'unknown'} failed:`, err.message);
     });
 
     this.worker.on("error", (err: Error) => {

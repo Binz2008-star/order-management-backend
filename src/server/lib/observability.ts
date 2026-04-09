@@ -1,8 +1,8 @@
 // === OBSERVABILITY SYSTEM ===
 // Request IDs, structured logs, latency measurement, and monitoring
 
-import { NextRequest, NextResponse } from "next/server";
 import { randomUUID } from "crypto";
+import { NextRequest, NextResponse } from "next/server";
 
 // === LOG LEVELS ===
 
@@ -50,7 +50,7 @@ export class StructuredLogger {
   private static instance: StructuredLogger;
   private logLevel: LogLevel = LogLevel.INFO;
 
-  private constructor() {}
+  private constructor() { }
 
   static getInstance(): StructuredLogger {
     if (!StructuredLogger.instance) {
@@ -70,7 +70,7 @@ export class StructuredLogger {
     return messageLevelIndex >= currentLevelIndex;
   }
 
-  private log(entry: LogEntry): void {
+  public log(entry: LogEntry): void {
     if (!this.shouldLog(entry.level)) {
       return;
     }
@@ -78,7 +78,7 @@ export class StructuredLogger {
     const logOutput = {
       ...entry,
       service: "order-management-backend",
-      version: process.env.npm_package_version || "1.0.0",
+      version: "1.0.0",
       environment: process.env.NODE_ENV || "development",
     };
 
@@ -132,7 +132,7 @@ export class RequestTracker {
   static createContext(request: NextRequest): ObservabilityContext {
     const requestId = request.headers.get("x-request-id") || randomUUID();
     const url = new URL(request.url);
-    
+
     const context: ObservabilityContext = {
       requestId,
       startTime: Date.now(),
@@ -142,13 +142,11 @@ export class RequestTracker {
     };
 
     this.contexts.set(requestId, context);
-    
+
     this.logger.info("Request started", {
       requestId,
       route: context.route,
       method: context.method,
-      userAgent: request.headers.get("user-agent"),
-      ip: this.getClientIP(request),
     });
 
     return context;
@@ -174,7 +172,7 @@ export class RequestTracker {
     const durationMs = Date.now() - context.startTime;
 
     const logLevel = status >= 500 ? LogLevel.ERROR : status >= 400 ? LogLevel.WARN : LogLevel.INFO;
-    
+
     this.logger.log({
       timestamp: new Date().toISOString(),
       level: logLevel,
@@ -231,19 +229,19 @@ export function withObservability(
 ) {
   return async (request: NextRequest): Promise<NextResponse> => {
     const context = RequestTracker.createContext(request);
-    
+
     try {
       const response = await handler(request, context);
-      
+
       // Add request ID to response headers
       response.headers.set("x-request-id", context.requestId);
-      
+
       RequestTracker.completeRequest(context.requestId, response.status, response);
-      
+
       return response;
     } catch (error) {
       RequestTracker.completeRequest(context.requestId, 500);
-      
+
       StructuredLogger.getInstance().error("Unhandled error in request", {
         requestId: context.requestId,
         route: context.route,
@@ -253,7 +251,7 @@ export function withObservability(
           stack: error instanceof Error ? error.stack : undefined,
         },
       });
-      
+
       throw error;
     }
   };
@@ -267,12 +265,12 @@ export class PerformanceMonitor {
 
   static trackOperation(name: string, operation: () => Promise<any> | any): Promise<any> {
     const startTime = Date.now();
-    
+
     return Promise.resolve(operation()).then(
       (result) => {
         const duration = Date.now() - startTime;
         this.recordMetric(name, duration);
-        
+
         if (duration > 1000) { // Log slow operations
           this.logger.warn("Slow operation detected", {
             details: {
@@ -282,13 +280,13 @@ export class PerformanceMonitor {
             },
           });
         }
-        
+
         return result;
       },
       (error) => {
         const duration = Date.now() - startTime;
         this.recordMetric(name, duration);
-        
+
         this.logger.error("Operation failed", {
           details: {
             operation: name,
@@ -296,7 +294,7 @@ export class PerformanceMonitor {
             error: error instanceof Error ? error.message : "Unknown error",
           },
         });
-        
+
         throw error;
       }
     );
@@ -306,10 +304,10 @@ export class PerformanceMonitor {
     if (!this.metrics.has(name)) {
       this.metrics.set(name, []);
     }
-    
+
     const metric = this.metrics.get(name)!;
     metric.push({ duration, timestamp: Date.now() });
-    
+
     // Keep only last 1000 entries
     if (metric.length > 1000) {
       metric.splice(0, metric.length - 1000);
@@ -348,11 +346,11 @@ export class PerformanceMonitor {
 
   static getAllMetrics(): Record<string, ReturnType<typeof PerformanceMonitor.getMetrics>> {
     const result: Record<string, ReturnType<typeof PerformanceMonitor.getMetrics>> = {};
-    
+
     for (const [name] of this.metrics) {
       result[name] = this.getMetrics(name);
     }
-    
+
     return result;
   }
 }
@@ -369,7 +367,7 @@ export class ExternalCallMonitor {
   ): Promise<T> {
     const startTime = Date.now();
     const callId = randomUUID();
-    
+
     this.logger.info("External call started", {
       requestId: context?.requestId,
       details: {
@@ -382,7 +380,7 @@ export class ExternalCallMonitor {
     try {
       const result = await operation();
       const duration = Date.now() - startTime;
-      
+
       this.logger.info("External call completed", {
         requestId: context?.requestId,
         details: {
@@ -397,7 +395,7 @@ export class ExternalCallMonitor {
       return result;
     } catch (error) {
       const duration = Date.now() - startTime;
-      
+
       this.logger.error("External call failed", {
         requestId: context?.requestId,
         errorCode: "EXTERNAL_CALL_FAILED",
@@ -441,19 +439,19 @@ export class HealthMonitor {
 
     for (const [name, check] of this.checks) {
       const startTime = Date.now();
-      
+
       try {
         const timeout = check.timeoutMs || 5000;
         const healthy = await Promise.race([
           check.check(),
-          new Promise<boolean>((_, reject) => 
+          new Promise<boolean>((_, reject) =>
             setTimeout(() => reject(new Error("Health check timeout")), timeout)
           ),
         ]);
-        
+
         const duration = Date.now() - startTime;
         results[name] = { healthy, duration };
-        
+
         if (!healthy) {
           overallHealthy = false;
           this.logger.warn("Health check failed", {
@@ -465,13 +463,13 @@ export class HealthMonitor {
         }
       } catch (error) {
         const duration = Date.now() - startTime;
-        results[name] = { 
-          healthy: false, 
+        results[name] = {
+          healthy: false,
           duration,
           error: error instanceof Error ? error.message : "Unknown error",
         };
         overallHealthy = false;
-        
+
         this.logger.error("Health check error", {
           details: {
             check: name,
@@ -492,4 +490,3 @@ export class HealthMonitor {
 // === EXPORTS ===
 
 export const logger = StructuredLogger.getInstance();
-export { RequestTracker, PerformanceMonitor, ExternalCallMonitor, HealthMonitor };

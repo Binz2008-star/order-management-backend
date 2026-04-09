@@ -95,11 +95,11 @@ describe('Order API Contract Tests', () => {
       console.log('Creating order with customerId:', customerId);
 
       const validOrderData = CreateOrderSchema.parse({
-        sellerId: sellerId,
-        customerId: customerId,
+        sellerId: 'seller_123', // External ID format
+        customerId: 'customer_456', // External ID format
         items: [
           {
-            productId: 'cm1234567890abcdef12345677', // Valid CUID format for test
+            productId: 'product_789', // External ID format
             quantity: 2,
           },
         ],

@@ -1,9 +1,9 @@
 import { PrismaClient } from '@prisma/client';
-import { AiQueueService } from './queue.service';
 import { EventEmitter } from 'events';
+import { AiQueueService } from './queue.service';
 
 export interface IngestionEvent {
-  type: 'PRODUCT_CREATED' | 'PRODUCT_UPDATED' | 'PRODUCT_DELETED' | 'POLICY_UPDATED' | 'FAQ_UPDATED';
+  type: 'PRODUCT_CREATED' | 'PRODUCT_UPDATED' | 'PRODUCT_DELETED' | 'ORDER_CREATED' | 'ORDER_UPDATED' | 'CUSTOMER_CREATED' | 'CUSTOMER_UPDATED' | 'POLICY_UPDATED' | 'FAQ_UPDATED';
   sellerId: string;
   sourceId: string;
   data: any;
@@ -65,35 +65,59 @@ export class AiIngestionService extends EventEmitter {
       switch (event.type) {
         case 'PRODUCT_CREATED':
         case 'PRODUCT_UPDATED':
-          await this.queueService.enqueueDocumentUpsert(
-            event.sellerId,
-            'PRODUCT',
-            event.sourceId
-          );
+          await this.queueService.addIndexingJob({
+            sellerId: event.sellerId,
+            jobType: 'UPSERT_DOCUMENT',
+            sourceType: 'PRODUCT',
+            sourceId: event.sourceId
+          });
           break;
 
         case 'PRODUCT_DELETED':
-          await this.queueService.enqueueDocumentDelete(
-            event.sellerId,
-            'PRODUCT',
-            event.sourceId
-          );
+          await this.queueService.addIndexingJob({
+            sellerId: event.sellerId,
+            jobType: 'DELETE_DOCUMENT',
+            sourceType: 'PRODUCT',
+            sourceId: event.sourceId
+          });
+          break;
+
+        case 'ORDER_CREATED':
+        case 'ORDER_UPDATED':
+          await this.queueService.addIndexingJob({
+            sellerId: event.sellerId,
+            jobType: 'UPSERT_DOCUMENT',
+            sourceType: 'ORDER',
+            sourceId: event.sourceId
+          });
+          break;
+
+        case 'CUSTOMER_CREATED':
+        case 'CUSTOMER_UPDATED':
+          await this.queueService.addIndexingJob({
+            sellerId: event.sellerId,
+            jobType: 'UPSERT_DOCUMENT',
+            sourceType: 'CUSTOMER',
+            sourceId: event.sourceId
+          });
           break;
 
         case 'POLICY_UPDATED':
-          await this.queueService.enqueueDocumentUpsert(
-            event.sellerId,
-            'POLICY',
-            event.sourceId
-          );
+          await this.queueService.addIndexingJob({
+            sellerId: event.sellerId,
+            jobType: 'UPSERT_DOCUMENT',
+            sourceType: 'POLICY',
+            sourceId: event.sourceId
+          });
           break;
 
         case 'FAQ_UPDATED':
-          await this.queueService.enqueueDocumentUpsert(
-            event.sellerId,
-            'FAQ',
-            event.sourceId
-          );
+          await this.queueService.addIndexingJob({
+            sellerId: event.sellerId,
+            jobType: 'UPSERT_DOCUMENT',
+            sourceType: 'FAQ',
+            sourceId: event.sourceId
+          });
           break;
 
         default:
@@ -106,9 +130,9 @@ export class AiIngestionService extends EventEmitter {
 
   // Method to be called from product service hooks
   async onProductChange(sellerId: string, productId: string, action: 'create' | 'update' | 'delete') {
-    const eventType = action === 'create' ? 'CREATED' : 
-                     action === 'update' ? 'UPDATED' : 'DELETED';
-    
+    const eventType = action === 'create' ? 'CREATED' :
+      action === 'update' ? 'UPDATED' : 'DELETED';
+
     await this.triggerProductIngestion(sellerId, productId, eventType);
   }
 
@@ -124,7 +148,10 @@ export class AiIngestionService extends EventEmitter {
 
   // Bulk ingestion for initial setup
   async triggerFullReindex(sellerId: string, priority: number = 0) {
-    await this.queueService.enqueueFullReindex(sellerId, priority);
+    await this.queueService.addIndexingJob({
+      sellerId,
+      jobType: 'FULL_REINDEX'
+    });
   }
 
   // Get ingestion statistics

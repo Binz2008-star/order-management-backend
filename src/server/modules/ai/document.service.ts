@@ -215,7 +215,6 @@ export class DocumentService {
       updateData.checksum = this.generateChecksum(updates.bodyText);
     }
     if (updates.languageCode) updateData.languageCode = updates.languageCode;
-    if (updates.isActive !== undefined) updateData.isActive = updates.isActive;
 
     return this.prisma.aiDocument.update({
       where: { id: documentId },

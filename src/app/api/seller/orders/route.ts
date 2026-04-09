@@ -5,6 +5,7 @@ import { PaginationSchema } from '@/server/lib/validation'
 import { CreateOrderSchema, GetOrdersSchema } from '@/shared/schemas/orders'
 import { NextRequest, NextResponse } from 'next/server'
 import { z } from 'zod'
+import { V1OrderResponseSchema } from '../../../../shared/schemas/v1-order-dto'
 
 type PaginationQuery = z.infer<typeof PaginationSchema>
 
@@ -166,7 +167,7 @@ export async function POST(request: NextRequest) {
     };
 
     // Enforce output contract
-    const safe = OrderCreateResponseSchema.parse(response);
+    const safe = V1OrderResponseSchema.parse(response);
 
     return NextResponse.json(safe);
   } catch (error) {
@@ -176,7 +177,7 @@ export async function POST(request: NextRequest) {
         error: {
           code: "VALIDATION_ERROR",
           message: "Invalid input data",
-          details: error.errors,
+          details: error.issues,
         },
       }, { status: 400 })
     }
