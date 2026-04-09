@@ -35,9 +35,15 @@ model Seller {
   status           String            @default("ACTIVE")
   createdAt        DateTime          @default(now()) @map("created_at")
   updatedAt        DateTime          @updatedAt @map("updated_at")
+  aiBenchmarkCases AiBenchmarkCase[]
+  aiDocumentChunks AiDocumentChunk[]
+  aiDocuments      AiDocument[]
+  aiIndexJobs      AiIndexJob[]
+  aiQueryLogs      AiQueryLog[]
   customers        Customer[]
   notificationJobs NotificationJob[]
   orders           Order[]
+  aiPolicy         SellerAiPolicy?
   staff            SellerStaff[]
   owner            User              @relation("SellerOwner", fields: [ownerUserId], references: [id], onDelete: Cascade)
 
@@ -60,7 +66,6 @@ model SellerStaff {
   @@unique([sellerId, userId])
   @@map("seller_staff")
 }
-
 
 model Customer {
   id          String   @id @default(cuid())
@@ -114,14 +119,14 @@ model Order {
 }
 
 model OrderItem {
-  id                  String  @id @default(cuid())
-  orderId             String  @map("order_id")
-  productId           String  @map("product_id")
-  productNameSnapshot String  @map("product_name_snapshot")
-  unitPriceMinor      Int     @map("unit_price_minor")
+  id                  String @id @default(cuid())
+  orderId             String @map("order_id")
+  productId           String @map("product_id")
+  productNameSnapshot String @map("product_name_snapshot")
+  unitPriceMinor      Int    @map("unit_price_minor")
   quantity            Int
-  lineTotalMinor      Int     @map("line_total_minor")
-  order               Order   @relation(fields: [orderId], references: [id], onDelete: Cascade)
+  lineTotalMinor      Int    @map("line_total_minor")
+  order               Order  @relation(fields: [orderId], references: [id], onDelete: Cascade)
 
   @@index([orderId])
   @@index([productId])
@@ -255,4 +260,152 @@ model verification {
   expiresAt  DateTime @db.Timestamptz(6)
   createdAt  DateTime @default(now()) @db.Timestamptz(6)
   updatedAt  DateTime @default(now()) @db.Timestamptz(6)
+}
+
+model SellerAiPolicy {
+  id                          String   @id @default(cuid())
+  sellerId                    String   @unique @map("seller_id")
+  retrievalEnabled            Boolean  @default(false) @map("retrieval_enabled")
+  intentRoutingEnabled        Boolean  @default(false) @map("intent_routing_enabled")
+  catalogNormalizationEnabled Boolean  @default(false) @map("catalog_normalization_enabled")
+  rerankEnabled               Boolean  @default(true) @map("rerank_enabled")
+  benchmarkGatePassed         Boolean  @default(false) @map("benchmark_gate_passed")
+  maxChunksPerQuery           Int      @default(8) @map("max_chunks_per_query")
+  minScoreThreshold           Float    @default(0.0) @map("min_score_threshold")
+  allowedDomainsJson          String?  @map("allowed_domains_json")
+  createdAt                   DateTime @default(now()) @map("created_at")
+  updatedAt                   DateTime @updatedAt @map("updated_at")
+  seller                      Seller   @relation(fields: [sellerId], references: [id], onDelete: Cascade)
+
+  @@map("seller_ai_policies")
+}
+
+model AiDocument {
+  id           String            @id @default(cuid())
+  sellerId     String            @map("seller_id")
+  domain       String
+  sourceType   String            @map("source_type")
+  sourceId     String?           @map("source_id")
+  title        String
+  bodyText     String            @map("body_text")
+  languageCode String?           @map("language_code")
+  checksum     String
+  isActive     Boolean           @default(true) @map("is_active")
+  createdAt    DateTime          @default(now()) @map("created_at")
+  updatedAt    DateTime          @updatedAt @map("updated_at")
+  chunks       AiDocumentChunk[]
+  seller       Seller            @relation(fields: [sellerId], references: [id], onDelete: Cascade)
+
+  @@index([sellerId, domain, isActive])
+  @@index([sellerId, sourceType, sourceId])
+  @@index([sellerId, checksum])
+  @@index([createdAt])
+  @@map("ai_documents")
+}
+
+model AiDocumentChunk {
+  id           String                   @id @default(cuid())
+  documentId   String                   @map("document_id")
+  sellerId     String                   @map("seller_id")
+  chunkIndex   Int                      @map("chunk_index")
+  content      String
+  tokenCount   Int                      @default(0) @map("token_count")
+  metadataJson String?                  @map("metadata_json")
+  createdAt    DateTime                 @default(now()) @map("created_at")
+  embedding    Unsupported("vector")?
+  fts          Unsupported("tsvector")?
+  document     AiDocument               @relation(fields: [documentId], references: [id], onDelete: Cascade)
+  seller       Seller                   @relation(fields: [sellerId], references: [id], onDelete: Cascade)
+  queryResults AiQueryResult[]
+
+  @@unique([documentId, chunkIndex])
+  @@index([sellerId, createdAt])
+  @@index([sellerId, documentId])
+  @@index([embedding])
+  @@index([fts], type: Gin)
+  @@map("ai_document_chunks")
+}
+
+model AiIndexJob {
+  id           String   @id @default(cuid())
+  sellerId     String   @map("seller_id")
+  jobType      String   @map("job_type")
+  status       String
+  payloadJson  String?  @map("payload_json")
+  attemptCount Int      @default(0) @map("attempt_count")
+  lastError    String?  @map("last_error")
+  createdAt    DateTime @default(now()) @map("created_at")
+  updatedAt    DateTime @updatedAt @map("updated_at")
+  seller       Seller   @relation(fields: [sellerId], references: [id], onDelete: Cascade)
+
+  @@index([sellerId, status, createdAt])
+  @@index([jobType, status])
+  @@map("ai_index_jobs")
+}
+
+model AiQueryLog {
+  id                  String          @id @default(cuid())
+  sellerId            String          @map("seller_id")
+  feature             String
+  queryText           String          @map("query_text")
+  normalizedQueryText String?         @map("normalized_query_text")
+  topK                Int             @map("top_k")
+  latencyMs           Int             @default(0) @map("latency_ms")
+  resultCount         Int             @default(0) @map("result_count")
+  traceId             String?         @map("trace_id")
+  createdAt           DateTime        @default(now()) @map("created_at")
+  seller              Seller          @relation(fields: [sellerId], references: [id], onDelete: Cascade)
+  results             AiQueryResult[]
+
+  @@index([sellerId, feature, createdAt])
+  @@index([traceId])
+  @@map("ai_query_logs")
+}
+
+model AiQueryResult {
+  id             String          @id @default(cuid())
+  queryLogId     String          @map("query_log_id")
+  chunkId        String          @map("chunk_id")
+  retrievalScore Float           @map("retrieval_score")
+  rerankScore    Float?          @map("rerank_score")
+  rank           Int
+  sourceRefJson  String?         @map("source_ref_json")
+  chunk          AiDocumentChunk @relation(fields: [chunkId], references: [id], onDelete: Cascade)
+  queryLog       AiQueryLog      @relation(fields: [queryLogId], references: [id], onDelete: Cascade)
+
+  @@unique([queryLogId, rank])
+  @@index([queryLogId])
+  @@index([chunkId])
+  @@map("ai_query_results")
+}
+
+model AiBenchmarkCase {
+  id                 String   @id @default(cuid())
+  sellerId           String?  @map("seller_id")
+  suite              String
+  queryText          String   @map("query_text")
+  expectedSourceType String?  @map("expected_source_type")
+  expectedSourceId   String?  @map("expected_source_id")
+  languageCode       String?  @map("language_code")
+  metadataJson       String?  @map("metadata_json")
+  createdAt          DateTime @default(now()) @map("created_at")
+  seller             Seller?  @relation(fields: [sellerId], references: [id], onDelete: Cascade)
+
+  @@index([suite, sellerId])
+  @@index([languageCode])
+  @@map("ai_benchmark_cases")
+}
+
+model AiBenchmarkRun {
+  id              String   @id @default(cuid())
+  suite           String
+  modelConfigJson String   @map("model_config_json")
+  metricsJson     String?  @map("metrics_json")
+  status          String
+  createdAt       DateTime @default(now()) @map("created_at")
+  updatedAt       DateTime @updatedAt @map("updated_at")
+
+  @@index([suite, createdAt])
+  @@index([status])
+  @@map("ai_benchmark_runs")
 }
