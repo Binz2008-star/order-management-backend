@@ -120,6 +120,7 @@ jobs:
         env:
           DATABASE_URL: ${{ env.DATABASE_URL }}
       - name: Post Schema Diff Comment to PR
+        if: github.event_name == 'pull_request'
         uses: neondatabase/schema-diff-action@v1
         with:
           project_id: ${{ vars.NEON_PROJECT_ID }}
