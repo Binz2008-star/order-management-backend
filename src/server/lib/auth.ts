@@ -1,8 +1,8 @@
+import { ApiError } from '@/server/http/api-error'
 import bcrypt from 'bcryptjs'
 import jwt, { JwtPayload, SignOptions } from 'jsonwebtoken'
 import { NextRequest } from 'next/server'
 import { prisma } from '../db/prisma'
-import { ApiError } from '@/server/http/api-error'
 
 const JWT_EXPIRES_IN: SignOptions['expiresIn'] = '7d'
 
@@ -40,6 +40,11 @@ function getJwtSecret(): string {
   const secret = process.env.JWT_SECRET
 
   if (!secret || secret.trim() === '') {
+    // Only allow fallback in development
+    if (process.env.NODE_ENV === 'development') {
+      return 'fallback-secret-for-testing'
+    }
+
     throw new ApiError(500, 'Authentication configuration error', 'AUTH_CONFIG_ERROR')
   }
 
@@ -167,15 +172,20 @@ export async function authenticateUser(
 export async function getCurrentUser(request: NextRequest): Promise<AuthUser> {
   const authHeader = request.headers.get('authorization')
 
+  console.log('Auth header:', authHeader?.substring(0, 20) + '...')
+
   if (!authHeader?.startsWith('Bearer ')) {
+    console.log('No Bearer token found')
     throw new ApiError(401, 'No token provided')
   }
 
   const token = authHeader.slice(7).trim()
   if (!token) {
+    console.log('Empty token after Bearer')
     throw new ApiError(401, 'No token provided')
   }
 
+  console.log('Token extracted, verifying...')
   return verifyToken(token)
 }
 
