@@ -103,7 +103,7 @@ export async function GET(
         order: safe,
       },
     })
-  } catch (error) {
+  } catch (error: unknown) {
     if (error instanceof z.ZodError) {
       return NextResponse.json({
         success: false,
@@ -117,11 +117,26 @@ export async function GET(
     }
 
     console.error("V1 Orders GET by ID error:", error)
+
+    // Handle ApiError instances with proper status codes
+    if (error instanceof Error && error.constructor.name === 'ApiError') {
+      const apiError = error as any;
+      return NextResponse.json({
+        success: false,
+        error: {
+          code: apiError.code || "INTERNAL_ERROR",
+          message: apiError.message,
+          timestamp: new Date().toISOString(),
+        },
+      }, { status: apiError.statusCode || 500 })
+    }
+
     return NextResponse.json({
       success: false,
       error: {
         code: "INTERNAL_ERROR",
         message: "Failed to fetch order",
+        details: error instanceof Error ? error.message : 'Unknown error',
         timestamp: new Date().toISOString(),
       },
     }, { status: 500 })

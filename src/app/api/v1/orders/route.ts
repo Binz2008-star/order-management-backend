@@ -15,6 +15,7 @@ export async function GET(request: NextRequest) {
     const user = await getCurrentUser(request)
     console.log('GET /api/v1/orders - user authenticated:', !!user);
     requireSeller(user)
+    console.log('GET /api/v1/orders - seller verified');
 
     const { searchParams } = new URL(request.url)
     const query = GetOrdersSchema.parse({
@@ -99,7 +100,6 @@ export async function GET(request: NextRequest) {
             quantity: item.quantity,
             lineTotalMinor: item.lineTotalMinor,
           })),
-          eventCount: order._count.events,
         })),
         pagination: {
           page,
@@ -129,7 +129,7 @@ export async function GET(request: NextRequest) {
     }).parse(response)
 
     return NextResponse.json(safe)
-  } catch (error) {
+  } catch (error: unknown) {
     if (error instanceof z.ZodError) {
       return NextResponse.json({
         success: false,
@@ -143,11 +143,31 @@ export async function GET(request: NextRequest) {
     }
 
     console.error("V1 Orders GET error:", error)
+    if (error instanceof Error) {
+      console.error("Stack trace:", error.stack)
+      console.error("Error type:", error.constructor.name)
+      console.error("Error message:", error.message)
+    }
+
+    // Handle ApiError instances with proper status codes
+    if (error instanceof Error && error.constructor.name === 'ApiError') {
+      const apiError = error as any;
+      return NextResponse.json({
+        success: false,
+        error: {
+          code: apiError.code || "INTERNAL_ERROR",
+          message: apiError.message,
+          timestamp: new Date().toISOString(),
+        },
+      }, { status: apiError.statusCode || 500 })
+    }
+
     return NextResponse.json({
       success: false,
       error: {
         code: "INTERNAL_ERROR",
         message: "Failed to fetch orders",
+        details: error.message,
         timestamp: new Date().toISOString(),
       },
     }, { status: 500 })
