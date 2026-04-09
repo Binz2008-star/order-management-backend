@@ -1,8 +1,7 @@
 
 // src/app/api/health/monitoring/route.ts
-import { NextRequest, NextResponse } from 'next/server';
 import { prisma } from '@/server/db/prisma';
-import { logger } from '@/server/lib/logger';
+import { NextRequest, NextResponse } from 'next/server';
 
 interface HealthStatus {
   status: 'healthy' | 'degraded' | 'unhealthy';
@@ -10,7 +9,7 @@ interface HealthStatus {
   version: string;
   checks: {
     database: {
-      status: 'healthy' | 'unhealthy';
+      status: 'healthy' | 'degraded' | 'unhealthy';
       responseTime: number;
       error?: string;
     };
@@ -27,9 +26,9 @@ interface HealthStatus {
   };
 }
 
-export async function GET(request: NextRequest) {
+export async function GET(_request: NextRequest) {
   const startTime = Date.now();
-  
+
   try {
     // Database health check
     const dbStatus: HealthStatus['checks']['database'] = {
@@ -44,7 +43,7 @@ export async function GET(request: NextRequest) {
       dbStatus.status = dbStatus.responseTime < 1000 ? 'healthy' : 'degraded';
     } catch (error) {
       dbStatus.error = error instanceof Error ? error.message : 'Unknown error';
-      logger.error('Health check failed', { error: dbStatus.error });
+      console.error('Health check failed', { error: dbStatus.error });
     }
 
     // Memory check
@@ -64,13 +63,13 @@ export async function GET(request: NextRequest) {
     };
 
     // Overall status
-    const overallStatus = 
-      dbStatus.status === 'unhealthy' || 
-      memoryStatus.status === 'unhealthy' || 
-      errorStatus.status === 'unhealthy' ? 'unhealthy' :
-      dbStatus.status === 'degraded' || 
-      memoryStatus.status === 'degraded' || 
-      errorStatus.status === 'degraded' ? 'degraded' : 'healthy';
+    const overallStatus =
+      dbStatus.status === 'unhealthy' ||
+        memoryStatus.status === 'unhealthy' ||
+        errorStatus.status === 'unhealthy' ? 'unhealthy' :
+        dbStatus.status === 'degraded' ||
+          memoryStatus.status === 'degraded' ||
+          errorStatus.status === 'degraded' ? 'degraded' : 'healthy';
 
     const health: HealthStatus = {
       status: overallStatus,
@@ -84,8 +83,8 @@ export async function GET(request: NextRequest) {
     };
 
     const responseTime = Date.now() - startTime;
-    
-    logger.info('Health check completed', {
+
+    console.log('Health check completed', {
       status: overallStatus,
       responseTime,
       checks: health.checks,
@@ -95,8 +94,8 @@ export async function GET(request: NextRequest) {
       status: overallStatus === 'healthy' ? 200 : overallStatus === 'degraded' ? 200 : 503,
     });
   } catch (error) {
-    logger.error('Health check failed', { error });
-    
+    console.error('Health check failed', { error });
+
     return NextResponse.json({
       status: 'unhealthy',
       timestamp: new Date().toISOString(),
