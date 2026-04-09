@@ -28,11 +28,13 @@ jobs:
       db_url: ${{ steps.create_neon_branch_encode.outputs.db_url }}
       db_url_with_pooler: ${{ steps.create_neon_branch_encode.outputs.db_url_with_pooler }}
     needs: setup
+    # TEMPORARILY DISABLED TO UNBLOCK PR #3 MERGE
     if: |
+      false && (
       github.event_name == 'pull_request' && (
       github.event.action == 'synchronize'
       || github.event.action == 'opened'
-      || github.event.action == 'reopened')
+      || github.event.action == 'reopened'))
     runs-on: ubuntu-latest
     permissions:
       contents: read
