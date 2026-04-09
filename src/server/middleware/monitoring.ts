@@ -6,7 +6,7 @@ import { NextRequest, NextResponse } from 'next/server';
 const logger = {
   warn: (message: string, data?: unknown) => console.warn(message, data),
   error: (message: string, data?: unknown) => console.error(message, data),
-  info: (message: string, data?: unknown) => console.info(message, data),
+  info: (message: string, data?: unknown) => process.stdout.write(JSON.stringify({ level: "INFO", message, data }) + "\n"),
 };
 
 interface RequestMetrics {

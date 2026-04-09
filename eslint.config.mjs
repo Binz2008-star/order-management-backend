@@ -27,6 +27,8 @@ const eslintConfig = defineConfig([
           caughtErrorsIgnorePattern: "^_",
         },
       ],
+      // Enforce structured logging — use logger from @/server/lib/logger instead
+      "no-console": ["error", { allow: ["error", "warn"] }],
     },
   },
 ]);

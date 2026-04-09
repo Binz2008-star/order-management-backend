@@ -1,3 +1,4 @@
+/* eslint-disable no-console */
 import { describe, it, expect } from 'vitest'
 import { NextRequest } from 'next/server'
 import { RateLimitService } from '../server/lib/rate-limit-service'

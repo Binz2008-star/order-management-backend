@@ -1,37 +1,16 @@
-const OrderStatus = {
-  PENDING: 'PENDING',
-  CONFIRMED: 'CONFIRMED',
-  PACKED: 'PACKED',
-  OUT_FOR_DELIVERY: 'OUT_FOR_DELIVERY',
-  DELIVERED: 'DELIVERED',
-  CANCELLED: 'CANCELLED',
-} as const
+/**
+ * BACKWARD COMPATIBILITY SHIM
+ *
+ * All values re-exported from the single source of truth.
+ * Do not add new logic here — use @/shared/constants/order-status directly.
+ */
+export {
+  OrderStatus,
+  OrderTransitionError,
+  ORDER_STATUS_TRANSITIONS,
+  isValidOrderTransition,
+  isTerminalOrderStatus,
+  getValidNextStates,
+} from '@/shared/constants/order-status'
 
-type OrderStatus = typeof OrderStatus[keyof typeof OrderStatus]
-
-export { OrderStatus }
-export type { OrderStatus as OrderStatusType }
-
-export const ORDER_STATUS_TRANSITIONS: Record<OrderStatus, OrderStatus[]> = {
-  PENDING: ['CONFIRMED', 'CANCELLED'],
-  CONFIRMED: ['PACKED', 'CANCELLED'],
-  PACKED: ['OUT_FOR_DELIVERY'],
-  OUT_FOR_DELIVERY: ['DELIVERED'],
-  DELIVERED: [],
-  CANCELLED: [],
-}
-
-export function isValidOrderTransition(from: OrderStatus, to: OrderStatus): boolean {
-  return ORDER_STATUS_TRANSITIONS[from]?.includes(to) ?? false
-}
-
-export function isTerminalOrderStatus(status: OrderStatus): boolean {
-  return ORDER_STATUS_TRANSITIONS[status].length === 0
-}
-
-export class OrderTransitionError extends Error {
-  constructor(from: OrderStatus, to: OrderStatus) {
-    super(`Invalid order transition from ${from} to ${to}`)
-    this.name = 'OrderTransitionError'
-  }
-}
+export type { OrderStatusValue as OrderStatusType } from '@/shared/constants/order-status'

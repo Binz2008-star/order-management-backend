@@ -8,7 +8,7 @@ import {
   OrderTransitionError,
   isTerminalOrderStatus,
   isValidOrderTransition
-} from './order-transitions'
+} from '@/shared/constants/order-status'
 
 type OrderStatusType = typeof OrderStatus[keyof typeof OrderStatus]
 
@@ -201,7 +201,8 @@ export class OrderService {
         where: { id: orderId },
         include: {
           customer: true,
-          orderItems: true
+          orderItems: true,
+          events: { orderBy: { createdAt: 'asc' } }
         }
       })
 
@@ -356,7 +357,9 @@ export class OrderService {
         page,
         limit,
         total,
-        totalPages: Math.ceil(total / limit)
+        totalPages: Math.ceil(total / limit),
+        hasNext: page * limit < total,
+        hasPrev: page > 1,
       }
     }
   }

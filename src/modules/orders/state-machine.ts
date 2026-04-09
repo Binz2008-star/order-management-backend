@@ -1,28 +1,24 @@
-export enum OrderStatus {
-  PENDING = 'PENDING',
-  CONFIRMED = 'CONFIRMED',
-  PREPARING = 'PREPARING',
-  READY_FOR_PICKUP = 'READY_FOR_PICKUP',
-  OUT_FOR_DELIVERY = 'OUT_FOR_DELIVERY',
-  DELIVERED = 'DELIVERED',
-  FAILED_DELIVERY = 'FAILED_DELIVERY',
-  CANCELLED = 'CANCELLED'
-}
+/**
+ * BACKWARD COMPATIBILITY SHIM — modules/orders/state-machine.ts
+ *
+ * All values re-exported from the single source of truth.
+ * Do not add new logic here — use @/shared/constants/order-status directly.
+ */
+export {
+  OrderStatus,
+  OrderTransitionError,
+  ORDER_STATUS_TRANSITIONS,
+  isValidOrderTransition,
+  isTerminalOrderStatus,
+  getValidNextStates,
+} from '@/shared/constants/order-status'
+
+// Legacy class-based API for backward compatibility
+import { OrderStatus, ORDER_STATUS_TRANSITIONS, OrderTransitionError } from '@/shared/constants/order-status'
 
 export class OrderStateMachine {
-  private static readonly VALID_TRANSITIONS: Record<OrderStatus, OrderStatus[]> = {
-    [OrderStatus.PENDING]: [OrderStatus.CONFIRMED, OrderStatus.CANCELLED],
-    [OrderStatus.CONFIRMED]: [OrderStatus.PREPARING, OrderStatus.CANCELLED],
-    [OrderStatus.PREPARING]: [OrderStatus.READY_FOR_PICKUP, OrderStatus.CANCELLED],
-    [OrderStatus.READY_FOR_PICKUP]: [OrderStatus.OUT_FOR_DELIVERY, OrderStatus.CANCELLED],
-    [OrderStatus.OUT_FOR_DELIVERY]: [OrderStatus.DELIVERED, OrderStatus.FAILED_DELIVERY],
-    [OrderStatus.FAILED_DELIVERY]: [OrderStatus.OUT_FOR_DELIVERY, OrderStatus.CANCELLED],
-    [OrderStatus.DELIVERED]: [], // Terminal
-    [OrderStatus.CANCELLED]: [], // Terminal
-  }
-
   static canTransition(from: OrderStatus, to: OrderStatus): boolean {
-    return this.VALID_TRANSITIONS[from]?.includes(to) ?? false
+    return ORDER_STATUS_TRANSITIONS[from]?.includes(to) ?? false
   }
 
   static validateTransition(from: OrderStatus, to: OrderStatus): void {
@@ -32,21 +28,14 @@ export class OrderStateMachine {
   }
 
   static isTerminal(status: OrderStatus): boolean {
-    return this.VALID_TRANSITIONS[status].length === 0
+    return ORDER_STATUS_TRANSITIONS[status].length === 0
   }
 
   static getAllValidTransitions(): Record<OrderStatus, OrderStatus[]> {
-    return { ...this.VALID_TRANSITIONS }
+    return { ...ORDER_STATUS_TRANSITIONS }
   }
 
   static getValidNextStates(currentStatus: OrderStatus): OrderStatus[] {
-    return this.VALID_TRANSITIONS[currentStatus] || []
-  }
-}
-
-export class OrderTransitionError extends Error {
-  constructor(from: OrderStatus, to: OrderStatus) {
-    super(`Invalid order transition: ${from} → ${to}`)
-    this.name = 'OrderTransitionError'
+    return ORDER_STATUS_TRANSITIONS[currentStatus] || []
   }
 }

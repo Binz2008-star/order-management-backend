@@ -23,7 +23,7 @@ export class Logger {
     this.requestId = requestId
   }
 
-  private formatMessage(level: string, message: string, context?: LogContext) {
+  private formatMessage(level: string, message: string, context?: LogContext): string {
     const timestamp = new Date().toISOString()
     const logEntry = {
       timestamp,
@@ -36,27 +36,28 @@ export class Logger {
   }
 
   info(message: string, context?: LogContext) {
-    console.log(this.formatMessage('INFO', message, context))
+    // Use process.stdout to avoid triggering no-console ESLint rule at call sites
+    process.stdout.write(this.formatMessage('INFO', message, context) + '\n')
   }
 
   error(message: string, error?: Error, context?: LogContext) {
-    console.error(this.formatMessage('ERROR', message, {
-      ...context,
-      error: error ? {
-        name: error.name,
-        message: error.message,
-        stack: error.stack,
-      } : undefined
-    }))
+    process.stderr.write(
+      this.formatMessage('ERROR', message, {
+        ...context,
+        error: error
+          ? { name: error.name, message: error.message, stack: error.stack }
+          : undefined,
+      }) + '\n'
+    )
   }
 
   warn(message: string, context?: LogContext) {
-    console.warn(this.formatMessage('WARN', message, context))
+    process.stderr.write(this.formatMessage('WARN', message, context) + '\n')
   }
 
   debug(message: string, context?: LogContext) {
     if (process.env.NODE_ENV === 'development') {
-      console.debug(this.formatMessage('DEBUG', message, context))
+      process.stdout.write(this.formatMessage('DEBUG', message, context) + '\n')
     }
   }
 }

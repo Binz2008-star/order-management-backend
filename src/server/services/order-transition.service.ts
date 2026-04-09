@@ -1,6 +1,13 @@
 import { Prisma } from '@prisma/client'
 import { logger } from '../lib/logger'
 import { createOrderEvent } from './order-event.service'
+import {
+  OrderStatus,
+  OrderTransitionError,
+  isValidOrderTransition,
+  isTerminalOrderStatus,
+  getValidNextStates,
+} from '@/shared/constants/order-status'
 
 export interface OrderTransitionRequest {
   orderId: string
@@ -23,24 +30,13 @@ export interface OrderTransitionResult {
  * This is the ONLY place where order status should change.
  * All order state mutations MUST go through this service.
  *
- * No direct order status writes anywhere else.
- * No direct order event row writes in routes.
+ * Transition map is imported from @/shared/constants/order-status — do NOT
+ * duplicate it here.
  */
 export class OrderTransitionService {
-  private readonly VALID_TRANSITIONS: Record<string, string[]> = {
-    'PENDING': ['CONFIRMED', 'CANCELLED'],
-    'CONFIRMED': ['PREPARING', 'CANCELLED'],
-    'PREPARING': ['READY_FOR_PICKUP', 'CANCELLED'],
-    'READY_FOR_PICKUP': ['OUT_FOR_DELIVERY', 'CANCELLED'],
-    'OUT_FOR_DELIVERY': ['DELIVERED', 'FAILED_DELIVERY'],
-    'FAILED_DELIVERY': ['OUT_FOR_DELIVERY', 'CANCELLED'],
-    'DELIVERED': [], // Terminal state
-    'CANCELLED': [], // Terminal state
-  }
-
   /**
-   * Apply order transition with proper validation and event creation
-   * This is the AUTHORITATIVE method for all order state changes
+   * Apply order transition with proper validation and event creation.
+   * This is the AUTHORITATIVE method for all order state changes.
    */
   async applyTransition(
     tx: Prisma.TransactionClient,
@@ -52,38 +48,32 @@ export class OrderTransitionService {
       orderId,
       fromStatus,
       toStatus,
-      actorUserId
+      actorUserId,
     })
 
-    // 1. Validate transition is allowed
-    const validTransitions = this.VALID_TRANSITIONS[fromStatus] || []
-    if (!validTransitions.includes(toStatus)) {
-      throw new Error(`Invalid order transition: ${fromStatus} -> ${toStatus}`)
+    // 1. Validate transition is allowed (uses shared map)
+    if (!isValidOrderTransition(fromStatus as OrderStatus, toStatus as OrderStatus)) {
+      throw new OrderTransitionError(fromStatus as OrderStatus, toStatus as OrderStatus)
     }
 
-    // 2. Get current order and verify current status
-    const currentOrder = await tx.order.findUnique({
-      where: { id: orderId }
-    })
-
+    // 2. Get current order and verify current status matches expectation
+    const currentOrder = await tx.order.findUnique({ where: { id: orderId } })
     if (!currentOrder) {
       throw new Error(`Order ${orderId} not found`)
     }
-
     if (currentOrder.status !== fromStatus) {
-      throw new Error(`Order status mismatch. Expected: ${fromStatus}, Actual: ${currentOrder.status}`)
+      throw new Error(
+        `Order status mismatch. Expected: ${fromStatus}, Actual: ${currentOrder.status}`
+      )
     }
 
-    // 3. Apply the status change (ONLY place this should happen)
+    // 3. Apply the status change — ONLY place this should happen
     const updatedOrder = await tx.order.update({
       where: { id: orderId },
-      data: {
-        status: toStatus,
-        updatedAt: new Date()
-      }
+      data: { status: toStatus, updatedAt: new Date() },
     })
 
-    // 4. Create the transition event (ONLY place this should happen)
+    // 4. Create the transition event — ONLY place this should happen
     const event = await createOrderEvent(tx, {
       orderId,
       eventType: 'status_changed',
@@ -93,12 +83,12 @@ export class OrderTransitionService {
         to: toStatus,
         reason,
         metadata,
-        timestamp: new Date().toISOString()
-      }
+        timestamp: new Date().toISOString(),
+      },
     })
 
-    // 5. Create specific cancellation event for audit completeness
-    if (toStatus === 'CANCELLED') {
+    // 5. Extra audit event for cancellations
+    if (toStatus === OrderStatus.CANCELLED) {
       await createOrderEvent(tx, {
         orderId,
         eventType: 'order_cancelled',
@@ -107,8 +97,8 @@ export class OrderTransitionService {
           from: fromStatus,
           reason,
           cancelledAt: new Date().toISOString(),
-          metadata
-        }
+          metadata,
+        },
       })
     }
 
@@ -116,46 +106,34 @@ export class OrderTransitionService {
       orderId,
       fromStatus,
       toStatus,
-      eventId: event.id
+      eventId: event.id,
     })
 
-    return {
-      order: updatedOrder,
-      event,
-      transitionValid: true
-    }
+    return { order: updatedOrder, event, transitionValid: true }
   }
 
-  /**
-   * Validate transition without applying it
-   */
+  /** Validate transition without applying it */
   validateTransition(fromStatus: string, toStatus: string): boolean {
-    const validTransitions = this.VALID_TRANSITIONS[fromStatus] || []
-    return validTransitions.includes(toStatus)
+    return isValidOrderTransition(fromStatus as OrderStatus, toStatus as OrderStatus)
   }
 
-  /**
-   * Get all possible next states for a given status
-   */
-  getNextStates(status: string): string[] {
-    return this.VALID_TRANSITIONS[status] || []
+  /** Get all possible next states for a given status */
+  getNextStates(status: string): OrderStatus[] {
+    return getValidNextStates(status as OrderStatus)
   }
 
-  /**
-   * Check if status is terminal (no further transitions)
-   */
+  /** Check if status is terminal (no further transitions) */
   isTerminalStatus(status: string): boolean {
-    const nextStates = this.VALID_TRANSITIONS[status] || []
-    return nextStates.length === 0
+    return isTerminalOrderStatus(status as OrderStatus)
   }
 }
 
-// Export singleton instance
+// Singleton instance
 export const orderTransitionService = new OrderTransitionService()
 
 /**
- * Convenience function for use in transactions
- * This is the ONLY way to change order status anywhere in the codebase
+ * Convenience function for use in transactions.
+ * This is the ONLY way to change order status anywhere in the codebase.
  */
 export async function applyOrderTransitionInTx(
   tx: Prisma.TransactionClient,

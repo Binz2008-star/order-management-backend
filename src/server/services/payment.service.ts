@@ -3,6 +3,7 @@ import { prisma } from '../db/prisma'
 import { logger } from '../lib/logger'
 import { createOrderEvent } from './order-event.service'
 import { OrderService } from './order.service'
+import { OrderStatus } from '@/shared/constants/order-status'
 
 type Tx = Prisma.TransactionClient
 
@@ -334,7 +335,7 @@ export class PaymentService {
       await OrderService.applyTransitionInTx(
         tx,
         orderId,
-        'CONFIRMED',
+        OrderStatus.CONFIRMED,
         null,
         'payment_completed'
       )

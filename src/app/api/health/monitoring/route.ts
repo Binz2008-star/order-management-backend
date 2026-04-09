@@ -1,7 +1,8 @@
 
 // src/app/api/health/monitoring/route.ts
 import { prisma } from '@/server/db/prisma';
-import { NextRequest, NextResponse } from 'next/server';
+import { NextRequest, NextResponse } from 'next/server'
+import { logger } from '@/server/lib/logger';
 
 interface HealthStatus {
   status: 'healthy' | 'degraded' | 'unhealthy';
@@ -85,7 +86,7 @@ export async function GET(_request: NextRequest) {
 
     const responseTime = Date.now() - startTime;
 
-    console.log('Health check completed', {
+    logger.info('Health check completed', {
       status: overallStatus,
       responseTime,
       checks: health.checks,

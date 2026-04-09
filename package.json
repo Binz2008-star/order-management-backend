@@ -31,7 +31,9 @@
     "release:proof": "tsx scripts/release-proof-core-flow.ts",
     "env:generate": "node scripts/generate-production-env.js",
     "verify:prod": "tsx scripts/verify-production.ts",
-    "quick:check": "node scripts/quick-check.js"
+    "quick:check": "node scripts/quick-check.js",
+    "ci:no-console": "bash -c 'result=$(grep -Rn \"console\\.log\" src/ --include=\"*.ts\" | grep -v \"test\\|spec\\|setup\" | grep -v \"process\\.stdout\\|process\\.stderr\"); if [ -n \"$result\" ]; then echo \"FAIL: console.log found:\\n$result\" && exit 1; fi; echo \"PASS: no console.log found\"'",
+    "ci:check": "npm run typecheck && npm run lint && npm run ci:no-console"
   },
   "dependencies": {
     "@prisma/adapter-pg": "7.6.0",

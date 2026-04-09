@@ -1,70 +1,32 @@
-import { prisma } from '@/server/db/prisma'
-import { getCurrentUser, requireSeller } from '@/server/lib/auth'
-import { ApiError, handleApiError } from '@/server/lib/errors'
-import { UpdateOrderStatusSchema } from '@/server/lib/validation'
-import { OrderTransitionError } from '@/server/services/order-transitions'
-import { orderService } from '@/server/services/order.service'
 import { NextRequest, NextResponse } from 'next/server'
 
-function isOrderTransitionError(error: unknown): error is OrderTransitionError {
-  return (
-    error instanceof OrderTransitionError ||
-    (typeof error === 'object' &&
-      error !== null &&
-      'name' in error &&
-      (error as { name?: string }).name === 'OrderTransitionError')
-  )
-}
-
+/**
+ * DEPRECATED — use PATCH /api/seller/orders/:id/transition instead.
+ *
+ * This endpoint is kept to avoid hard 404s for any existing callers,
+ * but it returns a 410 Gone with a redirect hint.
+ */
 export async function PATCH(
-  request: NextRequest,
+  _request: NextRequest,
   { params }: { params: Promise<{ id: string }> }
 ): Promise<NextResponse> {
-  try {
-    const { id } = await params
-    const { status, reason } = UpdateOrderStatusSchema.parse(await request.json())
-
-    const user = await getCurrentUser(request)
-    const seller = requireSeller(user)
-
-    const existingOrder = await prisma.order.findFirst({
-      where: {
-        id,
-        sellerId: seller.sellerId,
+  const { id } = await params
+  return NextResponse.json(
+    {
+      success: false,
+      error: {
+        code: 'ENDPOINT_DEPRECATED',
+        message:
+          'This endpoint is deprecated. Use PATCH /api/seller/orders/:id/transition instead.',
+        newEndpoint: `/api/seller/orders/${id}/transition`,
       },
-      select: {
-        id: true,
+    },
+    {
+      status: 410,
+      headers: {
+        'Deprecation': 'true',
+        'Link': `</api/seller/orders/${id}/transition>; rel="successor-version"`,
       },
-    })
-
-    if (!existingOrder) {
-      throw new ApiError(404, 'Order not found')
     }
-
-    // Note: orderService.updateOrderStatus() handles transactions and audit logging internally
-    const updatedOrder = await orderService.updateOrderStatus({
-      orderId: id,
-      newStatus: status,
-      actorUserId: seller.id,
-      reason,
-    })
-
-    return NextResponse.json({
-      order: {
-        id: updatedOrder.id,
-        publicOrderNumber: updatedOrder.publicOrderNumber,
-        status: updatedOrder.status,
-        updatedAt: updatedOrder.updatedAt,
-      },
-    })
-  } catch (error: unknown) {
-    if (isOrderTransitionError(error)) {
-      return NextResponse.json(
-        { error: error.message },
-        { status: 400 }
-      )
-    }
-
-    return handleApiError(error)
-  }
+  )
 }

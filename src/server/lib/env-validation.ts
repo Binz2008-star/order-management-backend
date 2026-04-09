@@ -94,5 +94,5 @@ if (process.env.NODE_ENV === 'production') {
     validation.warnings.forEach(warning => console.warn(`  - ${warning}`))
   }
   
-  console.log('✅ Production environment validation passed')
+  process.stdout.write(JSON.stringify({ level: 'INFO', message: 'Production environment validation passed' }) + '\n')
 }
