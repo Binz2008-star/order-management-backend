@@ -250,7 +250,7 @@ export class OrderService {
     tx: Prisma.TransactionClient,
     order: Order & { orderItems: OrderItem[] },
     newStatus: OrderStatus,
-    _reason?: string
+    _reason?: string // eslint-disable-line @typescript-eslint/no-unused-vars
   ) {
     // CANCELLATION rules
     if (newStatus === OrderStatus.CANCELLED) {
