@@ -124,7 +124,7 @@ model OrderItem {
   order               Order   @relation(fields: [orderId], references: [id], onDelete: Cascade)
 
   @@index([orderId])
-  @@index([orderId, productId])
+  @@index([productId])
   @@map("order_items")
 }
 
@@ -184,8 +184,8 @@ model PaymentAttempt {
   order             Order    @relation(fields: [orderId], references: [id], onDelete: Cascade)
 
   @@unique([provider, providerReference])
-  @@unique([orderId, status])
   @@index([orderId])
+  @@index([orderId, status])
   @@index([status])
   @@index([provider, status])
   @@map("payment_attempts")

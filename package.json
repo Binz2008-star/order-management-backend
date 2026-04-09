@@ -28,6 +28,7 @@
     "db:seed": "npm run db:reset && npm run seed",
     "postinstall": "prisma generate",
     "migrate:deploy": "prisma migrate deploy",
+    "release:proof": "tsx scripts/release-proof-core-flow.ts",
     "env:generate": "node scripts/generate-production-env.js",
     "verify:prod": "tsx scripts/verify-production.ts",
     "quick:check": "node scripts/quick-check.js"

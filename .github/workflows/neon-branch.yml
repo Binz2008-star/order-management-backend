@@ -36,7 +36,7 @@ jobs:
     runs-on: ubuntu-latest
     permissions:
       contents: read
-      pull_requests: write
+      pull-requests: write
     steps:
       - name: Get branch expiration date as an env variable (2 weeks from now)
         id: get_expiration_date

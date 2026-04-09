@@ -59,7 +59,9 @@ export class PaymentService {
         where: { id: data.orderId },
         select: {
           id: true,
+          status: true,
           paymentType: true,
+          paymentStatus: true,
         }
       })
 
@@ -69,6 +71,14 @@ export class PaymentService {
       if (order.paymentType === 'CASH_ON_DELIVERY') {
         throw new Error('Payment attempts not allowed for Cash on Delivery orders')
       }
+
+      // Business rule: No payment attempts for terminal order states
+      if (['DELIVERED', 'CANCELLED'].includes(order.status)) {
+        throw new Error(`Cannot create payment attempt for order in ${order.status} status`)
+      }
+
+      // Note: Allow multiple payment attempts even for paid orders (business flexibility)
+      // Provider reference uniqueness will prevent duplicate payments
 
       // Check for existing payment attempts atomically
       const existingAttempt = await tx.paymentAttempt.findFirst({
@@ -218,6 +228,27 @@ export class PaymentService {
 
       if (data.refundAmountMinor > attempt.amountMinor) {
         throw new Error('Refund exceeds original amount')
+      }
+
+      // Check for existing refunds to prevent over-refunding
+      const existingRefunds = await tx.paymentAttempt.findMany({
+        where: {
+          orderId: attempt.orderId,
+          status: 'REFUNDED',
+          NOT: { id: data.paymentAttemptId }
+        },
+        select: {
+          metadataJson: true
+        }
+      })
+
+      const totalRefundedAmount = existingRefunds.reduce((sum, refund) => {
+        const metadata = refund.metadataJson ? JSON.parse(refund.metadataJson) : {}
+        return sum + (metadata.refundAmountMinor || 0)
+      }, 0)
+
+      if (totalRefundedAmount + data.refundAmountMinor > attempt.amountMinor) {
+        throw new Error(`Total refunds (${totalRefundedAmount + data.refundAmountMinor}) would exceed original payment amount (${attempt.amountMinor})`)
       }
 
       // Merge refund metadata with existing metadata
