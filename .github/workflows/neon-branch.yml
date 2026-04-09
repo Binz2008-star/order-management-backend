@@ -76,9 +76,9 @@ jobs:
             echo "EFFECTIVE_DATABASE_URL=${{ secrets.DATABASE_URL }}" >> $GITHUB_ENV
             echo "Using fallback DATABASE_URL from secrets"
           else
-            echo "WARNING: No DATABASE_URL in secrets, using hardcoded fallback"
-            echo "EFFECTIVE_DATABASE_URL=postgresql://neondb_owner:npg_doVwag4RtHS3@ep-steep-star-am1qfz8l-pooler.c-5.us-east-1.aws.neon.tech/neondb?sslmode=require" >> $GITHUB_ENV
-            echo "Using hardcoded Neon production URL as last resort"
+            echo "ERROR: No DATABASE_URL available - Neon branch creation failed and secrets.DATABASE_URL not set"
+            echo "This indicates a configuration issue that needs to be resolved"
+            exit 1
           fi
       - name: Generate Prisma Client
         run: npx prisma generate
