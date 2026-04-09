@@ -18,7 +18,7 @@ export class EmbeddingService {
   private readonly embeddingDimension = 384;
   private readonly maxBatchSize = 32;
 
-  constructor(private prisma: PrismaClient) {}
+  constructor(private prisma: PrismaClient) { }
 
   async generateEmbeddings(
     texts: string[],
@@ -26,9 +26,9 @@ export class EmbeddingService {
   ): Promise<EmbeddingResult[]> {
     const model = options.model || this.defaultModel;
     const batchSize = Math.min(options.batchSize || this.maxBatchSize, this.maxBatchSize);
-    
+
     const results: EmbeddingResult[] = [];
-    
+
     // Process in batches to avoid memory issues
     for (let i = 0; i < texts.length; i += batchSize) {
       const batch = texts.slice(i, i + batchSize);
@@ -49,17 +49,17 @@ export class EmbeddingService {
 
   private async processBatch(texts: string[], model: string): Promise<EmbeddingResult[]> {
     const startTime = Date.now();
-    
+
     try {
       // Add query/passage prefixes as required by E5 models
       const prefixedTexts = texts.map(text => `query: ${text}`);
-      
+
       // For now, we'll use a mock implementation
       // In production, this would call the actual embedding model
       const embeddings = await this.mockEmbeddingGeneration(prefixedTexts);
-      
+
       const latencyMs = Date.now() - startTime;
-      
+
       return embeddings.map((embedding, index) => ({
         embedding,
         tokenCount: this.estimateTokenCount(texts[index]),
@@ -74,7 +74,7 @@ export class EmbeddingService {
   private async mockEmbeddingGeneration(texts: string[]): Promise<number[][]> {
     // Mock implementation - in production, this would use the actual model
     // For now, generate random embeddings of the correct dimension
-    return texts.map(() => 
+    return texts.map(() =>
       Array.from({ length: this.embeddingDimension }, () => Math.random() * 2 - 1)
     );
   }
@@ -109,29 +109,31 @@ export class EmbeddingService {
       };
     });
 
-    // Store embeddings in database
-    await this.prisma.$executeRaw`
-      INSERT INTO ai_document_chunks (
-        id, document_id, seller_id, chunk_index, content, token_count, metadata_json, embedding, created_at
-      )
-      SELECT 
-        gen_random_uuid(),
-        document_id,
-        seller_id,
-        chunk_index,
-        content,
-        token_count,
-        metadata_json,
-        embedding::vector(384),
-        NOW()
-      FROM json_populate_recordset(NULL::record, ${JSON.stringify(chunkData)})
-      ON CONFLICT (document_id, chunk_index) 
-      DO UPDATE SET
-        content = EXCLUDED.content,
-        token_count = EXCLUDED.token_count,
-        metadata_json = EXCLUDED.metadata_json,
-        embedding = EXCLUDED.embedding::vector(384)
-    `;
+    // Store embeddings in database using individual inserts
+    for (const chunk of chunkData) {
+      await this.prisma.$executeRaw`
+        INSERT INTO ai_document_chunks (
+          id, document_id, seller_id, chunk_index, content, token_count, metadata_json, embedding, created_at
+        )
+        VALUES (
+          gen_random_uuid(),
+          ${chunk.documentId},
+          ${chunk.sellerId},
+          ${chunk.chunkIndex},
+          ${chunk.content},
+          ${chunk.tokenCount},
+          ${chunk.metadataJson},
+          ${chunk.embedding}::vector(384),
+          NOW()
+        )
+        ON CONFLICT (document_id, chunk_index)
+        DO UPDATE SET
+          content = EXCLUDED.content,
+          token_count = EXCLUDED.token_count,
+          metadata_json = EXCLUDED.metadata_json,
+          embedding = EXCLUDED.embedding::vector(384)
+      `;
+    }
 
     return {
       storedChunks: chunkData.length,
@@ -168,9 +170,9 @@ export class EmbeddingService {
     threshold: number = 0.7
   ) {
     const embeddingString = `[${queryEmbedding.join(',')}]`;
-    
+
     const results = await this.prisma.$queryRaw`
-      SELECT 
+      SELECT
         dc.id,
         dc.content,
         dc.chunk_index,

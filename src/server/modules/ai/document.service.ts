@@ -19,7 +19,7 @@ export interface CreateDocumentInput {
 }
 
 export class DocumentService {
-  constructor(private prisma: PrismaClient) {}
+  constructor(private prisma: PrismaClient) { }
 
   async createDocument(input: CreateDocumentInput) {
     const checksum = this.generateChecksum(input.bodyText);
@@ -208,7 +208,7 @@ export class DocumentService {
 
   async updateDocument(documentId: string, updates: Partial<CreateDocumentInput>) {
     const updateData: any = {};
-    
+
     if (updates.title) updateData.title = updates.title;
     if (updates.bodyText) {
       updateData.bodyText = updates.bodyText;
@@ -246,7 +246,7 @@ export class DocumentService {
     } = {}
   ) {
     const where: any = { sellerId };
-    
+
     if (filters.domain) where.domain = filters.domain;
     if (filters.sourceType) where.sourceType = filters.sourceType;
     if (filters.isActive !== undefined) where.isActive = filters.isActive;
@@ -268,10 +268,8 @@ export class DocumentService {
   }
 
   async getDocumentStats(sellerId: string) {
-    const stats = await this.prisma.aiDocument.aggregate({
+    const totalDocuments = await this.prisma.aiDocument.count({
       where: { sellerId },
-      _count: { id: true },
-      _by: ['domain', 'sourceType'],
     });
 
     const chunkStats = await this.prisma.aiDocumentChunk.aggregate({
@@ -280,15 +278,26 @@ export class DocumentService {
       _sum: { tokenCount: true },
     });
 
+    // Get breakdown by domain and sourceType
+    const documents = await this.prisma.aiDocument.findMany({
+      where: { sellerId },
+      select: { domain: true, sourceType: true },
+    });
+
+    const breakdown = documents.reduce((acc, doc) => {
+      const key = `${doc.domain}-${doc.sourceType}`;
+      acc[key] = (acc[key] || 0) + 1;
+      return acc;
+    }, {} as Record<string, number>);
+
     return {
-      totalDocuments: stats._count.id || 0,
+      totalDocuments,
       totalChunks: chunkStats._count.id || 0,
       totalTokens: chunkStats._sum.tokenCount || 0,
-      breakdown: stats._by.map(stat => ({
-        domain: stat.domain,
-        sourceType: stat.sourceType,
-        count: stat._count.id,
-      })),
+      breakdown: Object.entries(breakdown).map(([key, count]) => {
+        const [domain, sourceType] = key.split('-');
+        return { domain, sourceType, count };
+      }),
     };
   }
 
@@ -312,7 +321,7 @@ export class DocumentService {
     }
 
     const chunks = this.createTextChunks(document.bodyText, maxChunkSize, overlap);
-    
+
     return chunks.map((chunk, index) => ({
       documentId,
       sellerId: document.sellerId,
@@ -330,14 +339,14 @@ export class DocumentService {
   private createTextChunks(text: string, maxSize: number, overlap: number): string[] {
     const words = text.split(/\s+/);
     const chunks: string[] = [];
-    
+
     for (let i = 0; i < words.length; i += maxSize - overlap) {
       const chunk = words.slice(i, i + maxSize).join(' ');
       chunks.push(chunk);
-      
+
       if (i + maxSize >= words.length) break;
     }
-    
+
     return chunks;
   }
 
