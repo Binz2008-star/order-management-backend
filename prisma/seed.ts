@@ -52,61 +52,7 @@ async function main() {
     })
     console.log('✅ Seller created/upserted:', seller.brandName)
 
-    // 3. Products - only after seller exists
-    console.log('📝 Creating/upserting products...')
-    const productsData = [
-      {
-        name: 'Classic T-Shirt',
-        slug: 'classic-tshirt',
-        description: 'Comfortable cotton t-shirt perfect for casual wear',
-        priceMinor: 1999,
-      },
-      {
-        name: 'Denim Jeans',
-        slug: 'denim-jeans',
-        description: 'Classic fit denim jeans with modern styling',
-        priceMinor: 4999,
-      },
-      {
-        name: 'Canvas Sneakers',
-        slug: 'canvas-sneakers',
-        description: 'Lightweight canvas sneakers for everyday comfort',
-        priceMinor: 3499,
-      },
-    ]
-
-    const products = []
-    for (const p of productsData) {
-      // Use existing unique constraint @@unique([sellerId, slug])
-      const product = await prisma.product.upsert({
-        where: {
-          sellerId_slug: {
-            sellerId: seller.id,
-            slug: p.slug,
-          },
-        },
-        update: {
-          name: p.name,
-          description: p.description,
-          priceMinor: p.priceMinor,
-          currency: 'USD',
-          stockQuantity: 50,
-          isActive: true,
-        },
-        create: {
-          sellerId: seller.id,
-          name: p.name,
-          slug: p.slug,
-          description: p.description,
-          priceMinor: p.priceMinor,
-          currency: 'USD',
-          stockQuantity: 50,
-          isActive: true,
-        },
-      })
-      products.push(product)
-      console.log('✅ Product created/upserted:', product.name)
-    }
+    console.log('Products now handled by platform layer - skipping runtime seed')
 
     // 4. Customer - only after seller exists
     console.log('📝 Creating/upserting customer...')

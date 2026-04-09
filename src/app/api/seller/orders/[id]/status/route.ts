@@ -2,8 +2,8 @@ import { prisma } from '@/server/db/prisma'
 import { getCurrentUser, requireSeller } from '@/server/lib/auth'
 import { ApiError, handleApiError } from '@/server/lib/errors'
 import { UpdateOrderStatusSchema } from '@/server/lib/validation'
-import { orderService } from '@/server/services/order.service'
 import { OrderTransitionError } from '@/server/services/order-transitions'
+import { orderService } from '@/server/services/order.service'
 import { NextRequest, NextResponse } from 'next/server'
 
 function isOrderTransitionError(error: unknown): error is OrderTransitionError {
@@ -41,6 +41,7 @@ export async function PATCH(
       throw new ApiError(404, 'Order not found')
     }
 
+    // Note: orderService.updateOrderStatus() handles transactions and audit logging internally
     const updatedOrder = await orderService.updateOrderStatus({
       orderId: id,
       newStatus: status,

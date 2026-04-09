@@ -1,11 +1,10 @@
-import type { Customer, Order, Product, Seller } from '@prisma/client'
+import type { Customer, Order, Seller } from '@prisma/client'
 import { prisma } from '../../server/db/prisma'
 import { PaymentService } from '../../server/services/payment.service'
 
 describe('Payment Service - Atomic Operations', () => {
   let seller: Seller
   let customer: Customer
-  let product: Product
   let order: Order
 
   beforeEach(async () => {
@@ -15,7 +14,6 @@ describe('Payment Service - Atomic Operations', () => {
     await prisma.orderItem.deleteMany()
     await prisma.order.deleteMany()
     await prisma.customer.deleteMany()
-    await prisma.product.deleteMany()
     await prisma.seller.deleteMany()
     await prisma.user.deleteMany()
 
@@ -49,19 +47,6 @@ describe('Payment Service - Atomic Operations', () => {
       }
     })
 
-    product = await prisma.product.create({
-      data: {
-        id: `product_${Date.now()}`,
-        sellerId: seller.id,
-        name: 'Test Product',
-        slug: `test-product-${Date.now()}`,
-        priceMinor: 1000,
-        currency: 'USD',
-        stockQuantity: 10,
-        isActive: true
-      }
-    })
-
     order = await prisma.order.create({
       data: {
         id: `order_${Date.now()}`,
@@ -80,11 +65,11 @@ describe('Payment Service - Atomic Operations', () => {
     await prisma.orderItem.create({
       data: {
         orderId: order.id,
-        productId: product.id,
+        productId: 'test-product-id',
         quantity: 2,
         unitPriceMinor: 1000,
         lineTotalMinor: 2000,
-        productNameSnapshot: product.name
+        productNameSnapshot: 'Test Product'
       }
     })
   })
@@ -96,7 +81,6 @@ describe('Payment Service - Atomic Operations', () => {
     await prisma.orderItem.deleteMany()
     await prisma.order.deleteMany()
     await prisma.customer.deleteMany()
-    await prisma.product.deleteMany()
     await prisma.seller.deleteMany()
   })
 

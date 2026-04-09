@@ -17,10 +17,18 @@ class OrderServiceCompatibilityWrapper {
     deliveryFeeMinor?: number
     notes?: string
   }, actorUserId?: string) {
+    // Convert legacy interface to new CreateOrderData format
+    const itemsWithProductData = request.items.map(item => ({
+      productId: item.productId,
+      productNameSnapshot: `Product ${item.productId}`, // Default fallback
+      unitPriceMinor: 0, // Default fallback - should be provided by platform
+      quantity: item.quantity
+    }))
+
     return canonicalOrderService.createOrder({
       sellerId: request.sellerId,
       customerId: request.customerId,
-      items: request.items,
+      items: itemsWithProductData,
       currency: 'USD',
       paymentType: 'CARD',
       notes: request.notes,

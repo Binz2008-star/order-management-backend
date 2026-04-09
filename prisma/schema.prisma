@@ -38,7 +38,6 @@ model Seller {
   customers        Customer[]
   notificationJobs NotificationJob[]
   orders           Order[]
-  products         Product[]
   staff            SellerStaff[]
   owner            User              @relation("SellerOwner", fields: [ownerUserId], references: [id], onDelete: Cascade)
 
@@ -62,28 +61,6 @@ model SellerStaff {
   @@map("seller_staff")
 }
 
-model Product {
-  id            String      @id @default(cuid())
-  sellerId      String      @map("seller_id")
-  name          String
-  slug          String
-  description   String?
-  priceMinor    Int         @map("price_minor")
-  currency      String
-  stockQuantity Int         @map("stock_quantity")
-  isActive      Boolean     @default(true) @map("is_active")
-  createdAt     DateTime    @default(now()) @map("created_at")
-  updatedAt     DateTime    @updatedAt @map("updated_at")
-  orderItems    OrderItem[]
-  seller        Seller      @relation(fields: [sellerId], references: [id], onDelete: Cascade)
-
-  @@unique([sellerId, slug])
-  @@index([sellerId, isActive])
-  @@index([sellerId, createdAt])
-  @@index([sellerId, name])
-  @@index([isActive])
-  @@map("products")
-}
 
 model Customer {
   id          String   @id @default(cuid())
@@ -145,11 +122,9 @@ model OrderItem {
   quantity            Int
   lineTotalMinor      Int     @map("line_total_minor")
   order               Order   @relation(fields: [orderId], references: [id], onDelete: Cascade)
-  product             Product @relation(fields: [productId], references: [id], onDelete: Cascade)
 
   @@index([orderId])
   @@index([productId])
-  @@index([orderId, productId])
   @@map("order_items")
 }
 
@@ -209,8 +184,8 @@ model PaymentAttempt {
   order             Order    @relation(fields: [orderId], references: [id], onDelete: Cascade)
 
   @@unique([provider, providerReference])
-  @@unique([orderId, status])
   @@index([orderId])
+  @@index([orderId, status])
   @@index([status])
   @@index([provider, status])
   @@map("payment_attempts")

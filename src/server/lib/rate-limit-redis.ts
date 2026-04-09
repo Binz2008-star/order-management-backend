@@ -1,3 +1,4 @@
+// Rate limiting store - no database transactions needed (Redis operations are atomic)
 import { NextRequest } from 'next/server'
 import { logger } from './logger'
 
@@ -128,7 +129,7 @@ class UpstashRestClient implements RedisClient {
   constructor(
     private readonly baseUrl: string,
     private readonly token: string
-  ) {}
+  ) { }
 
   private async request<T>(command: string[], method: 'GET' | 'POST' = 'POST'): Promise<T> {
     const encodedCommand = command.map((part) => encodeURIComponent(part)).join('/')
@@ -269,7 +270,7 @@ export class MemoryRateLimitStore implements RateLimitStore {
 }
 
 class RedisRateLimitStore implements RateLimitStore {
-  constructor(private readonly redis: RedisClient) {}
+  constructor(private readonly redis: RedisClient) { }
 
   async check(key: string, limit: number, windowMs: number): Promise<RateLimitCheckResult> {
     if (!this.redis.multi) {
@@ -318,7 +319,7 @@ export class RateLimiter {
   private primaryStore: RateLimitStore | null = null
   private initPromise: Promise<void> | null = null
 
-  constructor(private readonly config: RateLimitConfig) {}
+  constructor(private readonly config: RateLimitConfig) { }
 
   private get failurePolicy(): RateLimitFailurePolicy {
     return this.config.failurePolicy ?? inferFailurePolicy(this.config.redisKeyPrefix)

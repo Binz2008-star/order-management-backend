@@ -1,18 +1,22 @@
 export enum OrderStatus {
   PENDING = 'PENDING',
-  CONFIRMED = 'CONFIRMED', 
-  PACKED = 'PACKED',
+  CONFIRMED = 'CONFIRMED',
+  PREPARING = 'PREPARING',
+  READY_FOR_PICKUP = 'READY_FOR_PICKUP',
   OUT_FOR_DELIVERY = 'OUT_FOR_DELIVERY',
   DELIVERED = 'DELIVERED',
+  FAILED_DELIVERY = 'FAILED_DELIVERY',
   CANCELLED = 'CANCELLED'
 }
 
 export class OrderStateMachine {
   private static readonly VALID_TRANSITIONS: Record<OrderStatus, OrderStatus[]> = {
     [OrderStatus.PENDING]: [OrderStatus.CONFIRMED, OrderStatus.CANCELLED],
-    [OrderStatus.CONFIRMED]: [OrderStatus.PACKED, OrderStatus.CANCELLED],
-    [OrderStatus.PACKED]: [OrderStatus.OUT_FOR_DELIVERY],
-    [OrderStatus.OUT_FOR_DELIVERY]: [OrderStatus.DELIVERED],
+    [OrderStatus.CONFIRMED]: [OrderStatus.PREPARING, OrderStatus.CANCELLED],
+    [OrderStatus.PREPARING]: [OrderStatus.READY_FOR_PICKUP, OrderStatus.CANCELLED],
+    [OrderStatus.READY_FOR_PICKUP]: [OrderStatus.OUT_FOR_DELIVERY, OrderStatus.CANCELLED],
+    [OrderStatus.OUT_FOR_DELIVERY]: [OrderStatus.DELIVERED, OrderStatus.FAILED_DELIVERY],
+    [OrderStatus.FAILED_DELIVERY]: [OrderStatus.OUT_FOR_DELIVERY, OrderStatus.CANCELLED],
     [OrderStatus.DELIVERED]: [], // Terminal
     [OrderStatus.CANCELLED]: [], // Terminal
   }

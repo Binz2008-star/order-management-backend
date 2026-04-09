@@ -34,7 +34,7 @@ jobs:
 
       - uses: actions/setup-node@v4
         with:
-          node-version: '20'
+          node-version: "20"
           cache: npm
           cache-dependency-path: package-lock.json
 
@@ -45,7 +45,9 @@ jobs:
         run: npx prisma generate
 
       - name: Run migrations on test database
-        run: npx prisma migrate deploy
+        run: |
+          echo "DATABASE_URL=postgresql://postgres:postgres@localhost:5432/order_management_test?schema=public" >> .env
+          npx prisma migrate deploy
 
       - name: Type Check
         run: npm run typecheck
@@ -85,7 +87,7 @@ jobs:
 
       - uses: actions/setup-node@v4
         with:
-          node-version: '20'
+          node-version: "20"
           cache: npm
           cache-dependency-path: package-lock.json
 

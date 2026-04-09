@@ -17,6 +17,8 @@ export interface CreateOrderData {
   customerId: string
   items: Array<{
     productId: string
+    productNameSnapshot: string
+    unitPriceMinor: number
     quantity: number
   }>
   currency: string
@@ -50,47 +52,23 @@ export class OrderService {
       }> = []
 
       for (const item of data.items) {
-        const product = await tx.product.findFirst({
-          where: {
-            id: item.productId,
-            sellerId: data.sellerId,
-            isActive: true
-          }
-        })
-
-        if (!product) {
-          throw new Error(`Product ${item.productId} not found or inactive`)
-        }
-
-        if (product.stockQuantity < item.quantity) {
-          throw new Error(`Insufficient stock for product ${product.name}`)
-        }
-
-        const unitPriceMinor = product.priceMinor
+        // Product validation moved to platform layer
+        // Runtime uses provided product data from request
+        const unitPriceMinor = item.unitPriceMinor
         const lineTotalMinor = unitPriceMinor * item.quantity
         subtotalMinor += lineTotalMinor
 
         orderItems.push({
           productId: item.productId,
-          productNameSnapshot: product.name,
+          productNameSnapshot: item.productNameSnapshot,
           unitPriceMinor,
           quantity: item.quantity,
           lineTotalMinor
         })
-
-        // Update stock with proper concurrency handling
-        const stockUpdate = await tx.product.update({
-          where: { id: item.productId },
-          data: {
-            stockQuantity: { decrement: item.quantity }
-          }
-        })
-
-        // Verify stock was sufficient (handles race condition)
-        if (stockUpdate.stockQuantity < 0) {
-          throw new Error(`Insufficient stock for product ${product.name}. Available: ${product.stockQuantity}, Requested: ${item.quantity}`)
-        }
       }
+
+      // Stock management moved to platform layer
+      // Runtime only stores order data with product snapshots
 
       // Create order
       const order = await tx.order.create({
@@ -122,6 +100,15 @@ export class OrderService {
         data: orderItemsWithOrderId
       })
 
+      // Fetch order with items for response
+      const orderWithItems = await tx.order.findUnique({
+        where: { id: order.id },
+        include: {
+          customer: true,
+          orderItems: true
+        }
+      })
+
       // Log order creation event using centralized service
       await createOrderEvent(tx, {
         orderId: order.id,
@@ -141,7 +128,7 @@ export class OrderService {
         publicOrderNumber: order.publicOrderNumber
       })
 
-      return order
+      return orderWithItems
     }, { timeout: 15000, maxWait: 5000 })
   }
 
@@ -186,9 +173,7 @@ export class OrderService {
         where: { id: orderId },
         include: {
           customer: true,
-          orderItems: {
-            include: { product: true }
-          }
+          orderItems: true
         }
       })
 
@@ -273,30 +258,8 @@ export class OrderService {
         throw new Error('Cannot cancel order in terminal state')
       }
 
-      // Restock items and log stock events
-      for (const item of order.orderItems) {
-        await tx.product.update({
-          where: { id: item.productId },
-          data: {
-            stockQuantity: {
-              increment: item.quantity
-            }
-          }
-        })
-
-        // Log stock release event
-        await createOrderEvent(tx, {
-          orderId: order.id,
-          eventType: 'stock_released',
-          actorUserId: null,
-          payload: {
-            productId: item.productId,
-            productName: item.productNameSnapshot,
-            quantity: item.quantity,
-            reason: 'order_cancelled',
-          },
-        })
-      }
+      // Stock management moved to platform layer
+      // Runtime only logs order cancellation events
     }
 
     // CONFIRMATION rules
@@ -305,16 +268,8 @@ export class OrderService {
         throw new Error('Can only confirm pending orders')
       }
 
-      // Validate stock again
-      for (const item of order.orderItems) {
-        const product = await tx.product.findUnique({
-          where: { id: item.productId }
-        })
-
-        if (!product || product.stockQuantity < 0) {
-          throw new Error(`Insufficient stock for ${item.productNameSnapshot}`)
-        }
-      }
+      // Stock validation moved to platform layer
+      // Runtime only stores order data with product snapshots
     }
   }
 
@@ -353,9 +308,7 @@ export class OrderService {
       },
       include: {
         customer: true,
-        orderItems: {
-          include: { product: true }
-        },
+        orderItems: true,
         events: {
           orderBy: { createdAt: 'desc' }
         }

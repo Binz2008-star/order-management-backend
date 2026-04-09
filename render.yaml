@@ -1,0 +1,25 @@
+# Render deployment configuration
+services:
+  # Production API service
+  - type: web
+    name: order-management-backend
+    runtime: node
+    plan: starter
+    buildCommand: npm run build
+    startCommand: npm start
+    healthCheckPath: /health
+    envVars:
+      - key: NODE_ENV
+        value: production
+      - key: DATABASE_URL
+        sync: false
+      - key: JWT_SECRET
+        sync: false
+      - key: NEXTAUTH_SECRET
+        sync: false
+      - key: NEXTAUTH_URL
+        sync: false
+      - key: KARRIO_BASE_URL
+        sync: false
+      - key: KARRIO_API_KEY
+        sync: false
