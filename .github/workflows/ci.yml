@@ -2,101 +2,131 @@ name: CI
 
 on:
   push:
-    branches: [main]
+    branches: ["main", "develop"]
   pull_request:
-    branches: [main]
+    branches: ["main", "develop"]
 
 jobs:
-  quality:
+  build-and-test:
     runs-on: ubuntu-latest
+
     services:
       postgres:
-        image: postgres:16
+        image: postgres:16-alpine
         env:
-          POSTGRES_DB: order_management_test
           POSTGRES_USER: postgres
           POSTGRES_PASSWORD: postgres
+          POSTGRES_DB: test
         ports:
           - 5432:5432
         options: >-
-          --health-cmd "pg_isready -U postgres -d order_management_test"
-          --health-interval 10s
-          --health-timeout 5s
-          --health-retries 5
+          --health-cmd="pg_isready -U postgres -d test"
+          --health-interval=10s
+          --health-timeout=5s
+          --health-retries=5
+
+      redis:
+        image: redis:7-alpine
+        ports:
+          - 6379:6379
+        options: >-
+          --health-cmd="redis-cli ping"
+          --health-interval=10s
+          --health-timeout=5s
+          --health-retries=5
 
     env:
       NODE_ENV: test
-      JWT_SECRET: test-jwt-secret-32-bytes-minimum-value
-      DATABASE_URL: postgresql://postgres:postgres@localhost:5432/order_management_test?schema=public
+      DATABASE_URL: postgresql://postgres:postgres@localhost:5432/test
+      REDIS_URL: redis://localhost:6379
+      JWT_SECRET: test-ci-secret-min-32-characters-long
+      BCRYPT_ROUNDS: 10
 
     steps:
-      - uses: actions/checkout@v4
+      - name: Checkout repository
+        uses: actions/checkout@v4
 
-      - uses: actions/setup-node@v4
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
         with:
-          node-version: '20'
+          node-version: 20
           cache: npm
-          cache-dependency-path: package-lock.json
 
       - name: Install dependencies
         run: npm ci
 
-      - name: Generate Prisma Client
+      - name: Generate Prisma client
         run: npx prisma generate
 
-      - name: Run migrations on test database
+      - name: Run database migrations
         run: npx prisma migrate deploy
 
-      - name: Type Check
-        run: npm run typecheck
+      - name: Run typecheck
+        run: npm run typecheck --if-present || npx tsc --noEmit
 
-      - name: Lint
+      - name: Run lint
         run: npm run lint
 
-      - name: Run Critical Tests
-        run: npm run test:critical -- --reporter=default
+      - name: Run tests
+        run: npm test
 
-  full-suite:
-    runs-on: ubuntu-latest
-    needs: quality
-    if: github.ref == 'refs/heads/main'
-    services:
-      postgres:
-        image: postgres:16
-        env:
-          POSTGRES_DB: order_management_test
-          POSTGRES_USER: postgres
-          POSTGRES_PASSWORD: postgres
-        ports:
-          - 5432:5432
-        options: >-
-          --health-cmd "pg_isready -U postgres -d order_management_test"
-          --health-interval 10s
-          --health-timeout 5s
-          --health-retries 5
+      - name: Security enforcement checks
+        run: |
+          echo "Checking forbidden patterns..."
+          ! grep -R "fallback-secret" src || (echo "Forbidden auth fallback detected" && exit 1)
+          ! grep -R "hashed_password_placeholder" src || (echo "Placeholder password logic detected" && exit 1)
+          ! grep -R "process.env.JWT_SECRET ||" src || (echo "JWT fallback pattern detected" && exit 1)
+          ! grep -R "new Map<string" src/server/lib src/server/services || (echo "In-memory stateful store detected" && exit 1)
 
-    env:
-      NODE_ENV: test
-      JWT_SECRET: test-jwt-secret-32-bytes-minimum-value
-      DATABASE_URL: postgresql://postgres:postgres@localhost:5432/order_management_test?schema=public
+      - name: Architecture enforcement checks
+        run: |
+          echo "=== L1 Architecture Enforcement ==="
 
-    steps:
-      - uses: actions/checkout@v4
+          # Evidence 1: Forbidden imports scan
+          echo "## Forbidden Imports Evidence"
+          if grep -r "from.*\.\./\.\./server" src/app/ > /dev/null 2>&1; then
+            echo "VIOLATION: Cross-domain imports detected"
+            grep -r "from.*\.\./\.\./server" src/app/
+            echo "::error::Cross-domain imports detected - violates domain ownership"
+            exit 1
+          else
+            echo "PASS: No cross-domain imports found"
+          fi
 
-      - uses: actions/setup-node@v4
-        with:
-          node-version: '20'
-          cache: npm
-          cache-dependency-path: package-lock.json
+          # Evidence 2: Schema authority check
+          echo "## Schema Authority Evidence"
+          user_models=$(grep -r "^model User" prisma/ src/ | wc -l)
+          if [ "$user_models" -gt 1 ]; then
+            echo "VIOLATION: User model duplicated ($user_models instances)"
+            grep -r "^model User" prisma/ src/
+            echo "::error::User model duplication detected - violates schema authority"
+            exit 1
+          else
+            echo "PASS: User model authority confirmed"
+          fi
 
-      - name: Install dependencies
-        run: npm ci
+          # Evidence 3: Auth authority check
+          echo "## Auth Authority Evidence"
+          if grep -r "bcrypt\.hash\|jwt\.sign" src/app/ > /dev/null 2>&1; then
+            echo "VIOLATION: Auth logic detected in API routes"
+            grep -r "bcrypt\.hash\|jwt\.sign" src/app/
+            echo "::error::Auth logic outside backend detected - violates auth authority"
+            exit 1
+          else
+            echo "PASS: Auth authority confirmed (auth logic only in server layer)"
+          fi
 
-      - name: Generate Prisma Client
-        run: npx prisma generate
+          # Evidence 4: Generate L1 evidence report
+          echo '{"timestamp":"'$(date -u +%Y-%m-%dT%H:%M:%SZ)'","run_id":"'${{ github.run_id }}'","repo":"'${{ github.repository }}'","layer":"L1","checks":{' > evidence.json
+          echo '"cross_domain_imports":"PASS",' >> evidence.json
+          echo '"schema_authority":"PASS",' >> evidence.json
+          echo '"auth_authority":"PASS",' >> evidence.json
+          echo '"enforcement_level":"L1_COMPLETE"' >> evidence.json
+          echo '}}' >> evidence.json
 
-      - name: Run migrations on test database
-        run: npx prisma migrate deploy
+          echo "L1 Architecture Enforcement: PASSED"
 
-      - name: Run Full Test Suite
-        run: npm run test -- --reporter=default
+      - name: Build
+        run: npm run build
+
+

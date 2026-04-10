@@ -97,6 +97,21 @@ export class OrderTransitionService {
       }
     })
 
+    // 5. Create specific cancellation event for audit completeness
+    if (toStatus === 'CANCELLED') {
+      await createOrderEvent(tx, {
+        orderId,
+        eventType: 'order_cancelled',
+        actorUserId,
+        payload: {
+          from: fromStatus,
+          reason,
+          cancelledAt: new Date().toISOString(),
+          metadata
+        }
+      })
+    }
+
     logger.info('Authoritative order transition completed', {
       orderId,
       fromStatus,

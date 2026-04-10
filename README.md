@@ -4,15 +4,25 @@ Production-verified order management backend for social seller operations.
 
 ## Current Status
 
-### ✅ Production Verified
+### Development Phase - Not Production Ready
 
-- **Database**: PostgreSQL on Neon with production data and connectivity verified
-- **Deployment**: Vercel production runtime fully operational
-- **Authentication**: bcrypt-backed login and JWT issuance working in production
-- **Health Checks**: `/api/health` performing real database connectivity checks
-- **Order Creation**: Production-verified order creation with proper transaction handling
-- **Route Handler Factory**: Centralized error handling and auth middleware implemented
-- **Transaction Hardening**: 15-second timeout with proper error mapping for database issues
+This system is in active development with enterprise-grade enforcement mechanisms being implemented.
+
+**Current Implementation Status:**
+
+- **Database**: PostgreSQL on Neon with vector extension installed
+- **Testing**: Comprehensive test suite with AI integration tests
+- **Rate Limiting**: Redis-only implementation (no memory fallback)
+- **Gateway Enforcement**: ESLint rules blocking direct HTTP access
+- **AI Integration**: BullMQ worker system with circuit breakers
+- **Multi-Tenant Isolation**: Database-level separation verified
+
+**Still Needed for Production:**
+
+- Required GitHub status checks for merge protection
+- CI-wired contract/version validation
+- Production environment hardening
+- Complete audit trail verification
 
 ## Architecture
 
@@ -34,7 +44,7 @@ npm install
 
 # Setup database
 npm run db:generate
-npm run db:migrate
+npm run db:deploy
 npm run db:seed
 
 # Start development server
@@ -67,10 +77,10 @@ npm run test
 ### Database
 
 - `npm run db:generate` - Generate Prisma client
-- `npm run db:migrate` - Run migrations
-- `npm run db:studio` - Open Prisma Studio
-- `npm run db:seed` - Reset and seed database
-- `npm run seed` - Seed database only
+- `npm run db:migrate` - Create new migrations (interactive, development only)
+- `npm run db:deploy` - Apply existing migrations (non-interactive, CI/production)
+- `npm run db:seed` - Seed database with initial data
+- `npm run db:studio` - Open Prisma Studio database browser
 
 ### Code Quality
 
