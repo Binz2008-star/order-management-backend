@@ -1,5 +1,9 @@
+import { assertDestructiveOpsAllowed } from '@/server/lib/env-guard'
 import { PrismaClient } from '@prisma/client'
 import { afterAll, beforeAll, beforeEach, vi } from 'vitest'
+
+// Ensure destructive operations are only allowed in test environments
+assertDestructiveOpsAllowed('test setup')
 
 vi.mock('next/server', () => ({
   NextRequest: class MockNextRequest {

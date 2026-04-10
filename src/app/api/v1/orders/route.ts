@@ -1,6 +1,7 @@
-import { prisma } from '@/server/db/prisma'
 import { getCurrentUser, requireSeller } from '@/server/lib/auth'
-import { OrderResponseSchema } from '@/shared/schemas/order-response'
+import { listSellerOrders } from '@/server/modules/orders/order-list.query'
+import { createV1Order } from '@/server/modules/orders/v1-order.authority'
+import { OrderCreateResponseSchema, OrderResponseSchema } from '@/shared/schemas/order-response'
 import { CreateOrderSchema, GetOrdersSchema } from '@/shared/schemas/orders'
 import { NextRequest, NextResponse } from 'next/server'
 import { z } from 'zod'
@@ -9,6 +10,8 @@ export const runtime = 'nodejs'
 
 // === V1 ORDERS API ===
 // Versioned API - NEVER BREAK COMPATIBILITY IN V1
+
+type ApiErrorLike = Error & { code?: string; statusCode?: number }
 
 // GET /api/v1/orders - List orders
 export async function GET(request: NextRequest) {
@@ -29,44 +32,15 @@ export async function GET(request: NextRequest) {
     })
 
     const { page, limit } = query
-    const skip = (page - 1) * limit
 
-    const where = {
+    const { orders, total } = await listSellerOrders({
       sellerId: user.sellerId!,
-      ...(query.status && { status: query.status }),
-      ...(query.paymentStatus && { paymentStatus: query.paymentStatus }),
-      ...(query.customerId && { customerId: query.customerId }),
-    }
-
-    const [orders, total] = await Promise.all([
-      prisma.order.findMany({
-        where,
-        include: {
-          customer: true,
-          orderItems: {
-            select: {
-              id: true,
-              productId: true,
-              productNameSnapshot: true,
-              unitPriceMinor: true,
-              quantity: true,
-              lineTotalMinor: true,
-            },
-          },
-          _count: {
-            select: {
-              events: true,
-            },
-          },
-        },
-        orderBy: {
-          createdAt: 'desc',
-        },
-        skip,
-        take: limit,
-      }),
-      prisma.order.count({ where }),
-    ])
+      page,
+      limit,
+      status: query.status,
+      paymentStatus: query.paymentStatus,
+      customerId: query.customerId,
+    })
 
     const totalPages = Math.ceil(total / limit)
 
@@ -153,7 +127,7 @@ export async function GET(request: NextRequest) {
 
     // Handle ApiError instances with proper status codes
     if (error instanceof Error && error.constructor.name === 'ApiError') {
-      const apiError = error as any;
+      const apiError = error as ApiErrorLike;
       return NextResponse.json({
         success: false,
         error: {
@@ -188,109 +162,19 @@ export async function POST(request: NextRequest) {
     const validatedData = CreateOrderSchema.parse(body)
 
     // Translate external IDs to internal CUIDs
-    const translateExternalId = async (externalId: string, type: 'seller' | 'customer' | 'product'): Promise<string> => {
-      // For now, use mock mappings - in production these would come from platform services
-      const mockMappings: Record<string, string> = {
-        'seller_123': 'cmnri82ru0002114g5uxxnwrv', // Actual seeded seller
-        'customer_456': 'cmnri832g0004114gjldbisln', // Actual seeded customer
-        'product_789': 'cmnri82ru0002114g5uxxnwrv', // Use seller ID as product mock
-      };
-
-      const cuid = mockMappings[externalId];
-      if (!cuid) {
-        throw new Error(`Unknown external ${type} ID: ${externalId}`);
-      }
-
-      return cuid;
+    const command = {
+      sellerId: validatedData.sellerId,
+      customerId: validatedData.customerId,
+      paymentType: validatedData.paymentType,
+      paymentStatus: "PENDING",
+      notes: validatedData.notes,
+      items: validatedData.items.map(item => ({
+        productId: item.productId,
+        quantity: item.quantity,
+      })),
     }
 
-    // Calculate totals from items (would need product prices in real implementation)
-    const subtotalMinor = validatedData.items.reduce(
-      (sum, item) => sum + (item.quantity * 1000), // Mock price: 10.00 USD per item
-      0
-    )
-    const deliveryFeeMinor = 500 // Mock delivery fee: 5.00 USD
-    const totalMinor = subtotalMinor + deliveryFeeMinor
-
-    // Generate public order number
-    const publicOrderNumber = `ORD-${Date.now()}`
-
-    // Translate external IDs to internal CUIDs for database operations
-    const translatedSellerId = await translateExternalId(validatedData.sellerId, 'seller');
-    const translatedCustomerId = await translateExternalId(validatedData.customerId, 'customer');
-    const translatedItems = await Promise.all(
-      validatedData.items.map(async (item) => ({
-        ...item,
-        productId: await translateExternalId(item.productId, 'product')
-      }))
-    );
-
-    // Verify the external seller ID maps to the authenticated seller
-    if (translatedSellerId !== user.sellerId) {
-      throw new Error(`Seller ID mismatch: external ${validatedData.sellerId} maps to ${translatedSellerId}, but authenticated user is ${user.sellerId}`);
-    }
-
-    // Verify customer belongs to the authenticated seller
-    console.log('Customer verification - looking for:', {
-      customerId: translatedCustomerId,
-      sellerId: user.sellerId!,
-    });
-
-    const customer = await prisma.customer.findFirst({
-      where: {
-        id: translatedCustomerId,
-        sellerId: user.sellerId!,
-      },
-    });
-
-    console.log('Customer verification result:', !!customer);
-    if (!customer) {
-      // Check what customers exist for this seller
-      const allCustomers = await prisma.customer.findMany({
-        where: { sellerId: user.sellerId! },
-        select: { id: true, name: true },
-      });
-      console.log('All customers for seller:', allCustomers);
-
-      return NextResponse.json({
-        success: false,
-        error: {
-          code: "VALIDATION_ERROR",
-          message: "Customer not found or does not belong to seller",
-          timestamp: new Date().toISOString(),
-        },
-      }, { status: 400 });
-    }
-
-    // Create order with translated data (internal CUIDs)
-    const order = await prisma.order.create({
-      data: {
-        sellerId: user.sellerId!, // Use authenticated seller's ID
-        customerId: translatedCustomerId,
-        publicOrderNumber,
-        status: "PENDING",
-        paymentType: validatedData.paymentType,
-        paymentStatus: "PENDING",
-        subtotalMinor,
-        deliveryFeeMinor,
-        totalMinor,
-        currency: "USD", // TODO: Get from seller settings
-        notes: validatedData.notes,
-        orderItems: {
-          create: translatedItems.map(item => ({
-            productId: item.productId,
-            productNameSnapshot: `Product ${item.productId}`, // Use productId as name since no product table
-            unitPriceMinor: 1000, // Mock price: 10.00 USD
-            quantity: item.quantity,
-            lineTotalMinor: item.quantity * 1000, // Calculate line total
-          })),
-        },
-      },
-      include: {
-        customer: true,
-        orderItems: true,
-      },
-    })
+    const order = await createV1Order(command, user.sellerId!)
 
     // Build V1 contract response: { order: {...} }
     const orderResponse = {
@@ -326,9 +210,14 @@ export async function POST(request: NextRequest) {
     // Enforce V1 response contract
     const safe = OrderResponseSchema.parse(orderResponse)
 
-    return NextResponse.json({
-      order: safe,
+    const responseBody = OrderCreateResponseSchema.parse({
+      success: true,
+      data: {
+        order: safe,
+      },
     })
+
+    return NextResponse.json(responseBody)
   } catch (error: unknown) {
     if (error instanceof z.ZodError) {
       console.error("ZOD CONTRACT ERROR:", error.issues)

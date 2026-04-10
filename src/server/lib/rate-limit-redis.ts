@@ -410,34 +410,25 @@ export class RateLimiter {
   }
 
   async isAllowed(request: NextRequest): Promise<RateLimitCheckResult | null> {
-    // Disable rate limiting in test environment to ensure stable auth bootstrap
-    if (process.env.NODE_ENV === 'test' || process.env.VITEST === 'true') {
+    const disableRateLimiting = process.env.DISABLE_RATE_LIMITING === 'true'
+
+    if (disableRateLimiting && (process.env.NODE_ENV === 'test' || process.env.VITEST === 'true')) {
       return {
         allowed: true,
         remaining: Infinity,
-        resetTime: Date.now() + 60000
+        resetTime: Date.now() + 60000,
       }
     }
 
     const key = this.getKey(request)
     await this.ensureStoreInitialized()
 
-    // In production, Redis is required - fail fast if not available
-    if (process.env.NODE_ENV === 'production') {
-      if (!this.primaryStore) {
-        throw new Error('Redis rate limiting store not available in production')
-      }
-
-      try {
-        return await this.primaryStore.check(key, this.config.maxRequests, this.config.windowMs)
-      } catch (error) {
-        const errorMessage = error instanceof Error ? error.message : 'Unknown error'
-        throw new Error(`Production rate limiting failed: ${errorMessage}`)
-      }
-    }
-
-    // In development, allow memory fallback
     if (!this.primaryStore) {
+      if (this.shouldFailClosed()) {
+        logger.error('Rate limiting store unavailable and policy is fail-closed')
+        return null
+      }
+
       return this.memoryStore.check(key, this.config.maxRequests, this.config.windowMs)
     }
 

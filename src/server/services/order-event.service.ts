@@ -1,6 +1,7 @@
 import type { Prisma, PrismaClient } from '@prisma/client'
 import { prisma } from '../db/prisma'
 import { logger } from '../lib/logger'
+import { orderEventsAuthority } from '../modules/orders/order-events.authority'
 
 export interface CreateOrderEventRequest {
   orderId: string
@@ -27,13 +28,11 @@ export class OrderEventService {
 
     logger.debug('Creating order event', { orderId, eventType, actorUserId })
 
-    const event = await tx.orderEvent.create({
-      data: {
-        orderId,
-        eventType,
-        actorUserId,
-        payloadJson: payload ? JSON.stringify(payload) : null,
-      },
+    const event = await orderEventsAuthority.createOrderEvent(tx, {
+      orderId,
+      eventType,
+      actorUserId,
+      payload,
     })
 
     logger.debug('Order event created', { eventId: event.id, eventType })
