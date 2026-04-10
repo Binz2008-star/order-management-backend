@@ -5,17 +5,19 @@
 Add these to your Render service dashboard:
 
 ### 1. DATABASE_URL (Critical)
+
 ```
 Key: DATABASE_URL
 Value: postgresql://neondb_owner:npg_doVwag4RtHS3@ep-steep-star-am1qfz8l-pooler.c-5.us-east-1.aws.neon.tech/neondb?sslmode=require&channel_binding=require
 ```
 
 ### 2. Optional Variables (for full functionality)
+
 ```
 Key: UPSTASH_REDIS_REST_URL
 Value: [your Redis URL if available]
 
-Key: UPSTASH_REDIS_REST_TOKEN  
+Key: UPSTASH_REDIS_REST_TOKEN
 Value: [your Redis token if available]
 
 Key: STRIPE_WEBHOOK_SECRET
@@ -45,6 +47,7 @@ Value: 100
 ## After Setup
 
 Once DATABASE_URL is added, the deployment should succeed because:
+
 - Build script: `prisma generate && next build` (no migrations)
 - Repository: Using fix/order-contract-alignment branch
 - Prisma: Singleton pattern implemented

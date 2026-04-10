@@ -3,6 +3,7 @@ import bcrypt from 'bcryptjs'
 import jwt, { JwtPayload, SignOptions } from 'jsonwebtoken'
 import { NextRequest } from 'next/server'
 import { prisma } from '../db/prisma'
+import { env } from './env'
 
 const JWT_EXPIRES_IN: SignOptions['expiresIn'] = '7d'
 
@@ -36,20 +37,7 @@ export interface AdminAuthUser extends AuthUser {
   role: 'ADMIN'
 }
 
-function getJwtSecret(): string {
-  const secret = process.env.JWT_SECRET
-
-  if (!secret || secret.trim() === '') {
-    // Only allow fallback in development
-    if (process.env.NODE_ENV === 'development') {
-      return 'fallback-secret-for-testing'
-    }
-
-    throw new ApiError(500, 'Authentication configuration error', 'AUTH_CONFIG_ERROR')
-  }
-
-  return secret
-}
+// JWT secret validation handled in env.ts startup validation
 
 function assertNonEmptyString(value: unknown, fieldName: string): asserts value is string {
   if (typeof value !== 'string' || value.trim() === '') {
@@ -81,7 +69,7 @@ function normalizeTokenPayload(decoded: string | JwtPayload): TokenPayload {
 }
 
 export async function hashPassword(password: string): Promise<string> {
-  return bcrypt.hash(password, 12)
+  return bcrypt.hash(password, env.BCRYPT_ROUNDS)
 }
 
 export async function verifyPassword(password: string, hash: string): Promise<boolean> {
@@ -89,7 +77,6 @@ export async function verifyPassword(password: string, hash: string): Promise<bo
 }
 
 export function generateToken(user: AuthUser): string {
-  const jwtSecret = getJwtSecret()
   const payload: Omit<TokenPayload, keyof JwtPayload> = {
     id: user.id,
     email: user.email,
@@ -97,16 +84,19 @@ export function generateToken(user: AuthUser): string {
     sellerId: user.sellerId,
   }
 
-  return jwt.sign(payload, jwtSecret, {
+  return jwt.sign(payload, env.JWT_SECRET, {
     expiresIn: JWT_EXPIRES_IN,
+    issuer: 'order-management-backend',
+    audience: 'seller-dashboard',
   })
 }
 
 export function verifyToken(token: string): AuthUser {
-  const jwtSecret = getJwtSecret()
-
   try {
-    const decoded = jwt.verify(token, jwtSecret)
+    const decoded = jwt.verify(token, env.JWT_SECRET, {
+      issuer: 'order-management-backend',
+      audience: 'seller-dashboard',
+    })
     const payload = normalizeTokenPayload(decoded)
 
     return {

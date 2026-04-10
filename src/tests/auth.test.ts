@@ -1,13 +1,14 @@
 import { NextRequest } from 'next/server'
 import { afterAll, beforeAll, beforeEach, describe, expect, it } from 'vitest'
-import { authenticateUser, generateToken, getCurrentUser, hashPassword } from '../server/lib/auth'
+import { authenticateUser, getCurrentUser, hashPassword } from '../server/lib/auth'
 import { prisma } from '../tests/setup'
 
 describe('Authentication', () => {
   const originalJwtSecret = process.env.JWT_SECRET
+  const testJwtSecret = 'secure-32-character-jwt-key-for-development-only'
 
   beforeAll(() => {
-    process.env.JWT_SECRET = originalJwtSecret
+    process.env.JWT_SECRET = testJwtSecret
   })
 
   afterAll(() => {
@@ -111,22 +112,6 @@ describe('Authentication', () => {
       await expect(getCurrentUser(request)).rejects.toThrow('Invalid token')
     })
 
-    it('should fail when JWT_SECRET is missing', async () => {
-      const previousJwtSecret = process.env.JWT_SECRET
-      process.env.JWT_SECRET = ''
-
-      try {
-        expect(() =>
-          generateToken({
-            id: 'user-1',
-            email: `test-${Date.now()}-${Math.random()}@example.com`,
-            role: 'SELLER',
-            sellerId: 'seller-1',
-          })
-        ).toThrow('Authentication configuration error')
-      } finally {
-        process.env.JWT_SECRET = previousJwtSecret
-      }
-    })
+    // JWT_SECRET validation now handled at startup in startup.ts
   })
 })

@@ -26,38 +26,46 @@ export interface RedisRateLimitResult {
 // === REDIS-ONLY RATE LIMITER ===
 
 export class RedisOnlyRateLimiter {
-  private redis: Redis;
+  private redis: Redis | null = null;
+  private redisUrl: string;
   private defaultConfig: Partial<RedisRateLimitConfig>;
 
   constructor(redisUrl: string, defaultConfig: Partial<RedisRateLimitConfig> = {}) {
-    // Fail fast if Redis URL is not provided
-    if (!redisUrl) {
-      throw new Error("REDIS_URL is required for production rate limiting");
+    // Store URL for lazy initialization
+    this.redisUrl = redisUrl;
+    this.defaultConfig = defaultConfig;
+  }
+
+  private getRedis(): Redis {
+    if (!this.redis) {
+      if (!this.redisUrl) {
+        throw new Error('[RATE LIMIT] REDIS_URL is required for Redis store')
+      }
+
+      this.redis = new Redis(this.redisUrl, {
+        maxRetriesPerRequest: 3,
+        lazyConnect: true,
+        // Enable command timeout to fail fast on Redis issues
+        commandTimeout: 5000,
+        // Enable health checks
+        enableOfflineQueue: false,
+        // Fail fast on connection issues
+        connectTimeout: 5000,
+      });
+
+      // Set up error handling - NO fallback to memory
+      this.redis.on("error", (error) => {
+        console.error("Redis rate limiting error:", error);
+        // In production, this would trigger alerts
+        // We DO NOT fall back to memory
+      });
+
+      this.redis.on("close", () => {
+        console.error("Redis connection closed - rate limiting unavailable");
+      });
     }
 
-    this.redis = new Redis(redisUrl, {
-      maxRetriesPerRequest: 3,
-      lazyConnect: true,
-      // Enable command timeout to fail fast on Redis issues
-      commandTimeout: 5000,
-      // Enable health checks
-      enableOfflineQueue: false,
-      // Fail fast on connection issues
-      connectTimeout: 5000,
-    });
-
-    this.defaultConfig = defaultConfig;
-
-    // Set up error handling - NO fallback to memory
-    this.redis.on("error", (error) => {
-      console.error("Redis rate limiting error:", error);
-      // In production, this would trigger alerts
-      // We DO NOT fall back to memory
-    });
-
-    this.redis.on("close", () => {
-      console.error("Redis connection closed - rate limiting unavailable");
-    });
+    return this.redis
   }
 
   // === CORE RATE LIMITING LOGIC ===
@@ -71,7 +79,7 @@ export class RedisOnlyRateLimiter {
     const windowEnd = now;
 
     // Use Redis pipeline for atomic operations
-    const pipeline = this.redis.pipeline();
+    const pipeline = this.getRedis().pipeline();
 
     // Remove expired entries
     pipeline.zremrangebyscore(key, 0, windowStart);
@@ -113,7 +121,7 @@ export class RedisOnlyRateLimiter {
 
   async healthCheck(): Promise<boolean> {
     try {
-      const result = await this.redis.ping();
+      const result = await this.getRedis().ping();
       return result === "PONG";
     } catch (error) {
       console.error("Redis health check failed:", error);
@@ -199,7 +207,7 @@ export class RedisOnlyRateLimiter {
   // === UTILITY METHODS ===
 
   async resetKey(key: string): Promise<void> {
-    await this.redis.del(key);
+    await this.getRedis().del(key);
   }
 
   async getKeyInfo(key: string): Promise<{
@@ -207,7 +215,7 @@ export class RedisOnlyRateLimiter {
     oldestRequest?: number;
     newestRequest?: number;
   }> {
-    const pipeline = this.redis.pipeline();
+    const pipeline = this.getRedis().pipeline();
     pipeline.zcard(key);
     pipeline.zrange(key, 0, 0, "WITHSCORES");
     pipeline.zrange(key, -1, -1, "WITHSCORES");
@@ -229,7 +237,7 @@ export class RedisOnlyRateLimiter {
   }
 
   async cleanup(): Promise<void> {
-    await this.redis.quit();
+    await this.getRedis().quit();
   }
 
   // === PRODUCTION MONITORING ===
@@ -241,7 +249,7 @@ export class RedisOnlyRateLimiter {
     keys: number;
   }> {
     try {
-      const info = await this.redis.info("memory clients keyspace");
+      const info = await this.getRedis().info("memory clients keyspace");
       const lines = info.split("\r\n");
 
       const memory = lines.find(line => line.startsWith("used_memory_human:"))?.split(":")[1] || "unknown";

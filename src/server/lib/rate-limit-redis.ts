@@ -422,8 +422,23 @@ export class RateLimiter {
     const key = this.getKey(request)
     await this.ensureStoreInitialized()
 
+    // In production, Redis is required - fail fast if not available
+    if (process.env.NODE_ENV === 'production') {
+      if (!this.primaryStore) {
+        throw new Error('Redis rate limiting store not available in production')
+      }
+
+      try {
+        return await this.primaryStore.check(key, this.config.maxRequests, this.config.windowMs)
+      } catch (error) {
+        const errorMessage = error instanceof Error ? error.message : 'Unknown error'
+        throw new Error(`Production rate limiting failed: ${errorMessage}`)
+      }
+    }
+
+    // In development, allow memory fallback
     if (!this.primaryStore) {
-      return this.handleStoreFailure(key, new Error('No distributed rate-limit store configured'))
+      return this.memoryStore.check(key, this.config.maxRequests, this.config.windowMs)
     }
 
     try {

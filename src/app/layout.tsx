@@ -1,8 +1,8 @@
 import type { Metadata } from "next";
 import "./globals.css";
 
-// Validate production environment on startup
-import "../server/lib/env-validation";
+// Validate production environment on startup (single entry point)
+import "../server/lib/startup";
 
 export const metadata: Metadata = {
   title: "Order Management Backend",
