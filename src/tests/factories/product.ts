@@ -1,23 +1,21 @@
 // Note: There is no Product table in the schema.
 // Products are referenced by ID only in order items.
-// The v1-order.authority.ts uses MOCK_EXTERNAL_ID_MAP to translate external IDs.
+// The V1 API now accepts any string ID directly — no external ID translation.
 
 let productCounter = 0
 
 /**
- * Generate a unique external product ID for testing.
- * These IDs must be registered in MOCK_EXTERNAL_ID_MAP in v1-order.authority.ts
- * or the order creation will fail.
+ * Generate a unique product ID for testing.
+ * Since there is no Product table, any non-empty string is valid.
  */
-export function generateProductExternalId(): string {
+export function generateProductId(): string {
   productCounter++
-  return `product_${Date.now()}_${productCounter}`
+  return `test-product-${Date.now()}-${productCounter}`
 }
 
 /**
- * Returns a valid external product ID that exists in MOCK_EXTERNAL_ID_MAP.
- * For now, returns the hardcoded test ID.
+ * Returns a stable product ID for deterministic tests.
  */
 export function getValidTestProductId(): string {
-  return 'product_789'
+  return 'test-product-001'
 }

@@ -2,18 +2,15 @@ import { z } from "zod";
 
 // === ORDER SCHEMAS ===
 
-// External ID schema - accepts human-readable format at boundary
-const externalIdSchema = z.string().regex(/^[a-z]+_[0-9]+$/, "External ID must be in format 'prefix_number'");
+// ID schema - accepts any non-empty string (CUIDs in practice)
+const idSchema = z.string().min(1, "ID is required");
 
-// Internal CUID schema - for database operations
-const cuidSchema = z.string().cuid();
-
-// API contract schema - accepts external IDs, validates at boundary
+// API contract schema - accepts database IDs directly
 export const CreateOrderSchema = z.object({
-  sellerId: externalIdSchema,
-  customerId: externalIdSchema,
+  sellerId: idSchema,
+  customerId: idSchema,
   items: z.array(z.object({
-    productId: externalIdSchema,
+    productId: idSchema,
     quantity: z.number().int().positive().max(999),
   })).min(1, "At least one item is required"),
   paymentType: z.enum(["CASH_ON_DELIVERY", "CARD", "WALLET"]),
@@ -22,10 +19,10 @@ export const CreateOrderSchema = z.object({
 
 // Internal schema - for database operations with CUIDs only
 export const CreateOrderInternalSchema = z.object({
-  sellerId: cuidSchema,
-  customerId: cuidSchema,
+  sellerId: z.string().cuid(),
+  customerId: z.string().cuid(),
   items: z.array(z.object({
-    productId: cuidSchema,
+    productId: z.string().cuid(),
     quantity: z.number().int().positive().max(999),
   })),
   paymentType: z.enum(["CASH_ON_DELIVERY", "CARD", "WALLET"]),

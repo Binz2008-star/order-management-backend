@@ -1,16 +1,6 @@
 import { prisma } from "@/server/db/prisma";
 import { createOrderEvent } from "@/server/modules/orders/order-events.authority";
 
-interface ExternalIdTranslationMap {
-  [externalId: string]: string;
-}
-
-const MOCK_EXTERNAL_ID_MAP: ExternalIdTranslationMap = {
-  seller_123: "cmnri82ru0002114g5uxxnwrv",
-  customer_456: "cmnri832g0004114gjldbisln",
-  product_789: "cmnri82ru0002114g5uxxnwrv",
-};
-
 export interface CreateV1OrderCommand {
   sellerId: string;
   customerId: string;
@@ -53,15 +43,8 @@ export interface V1OrderResult {
   }>;
 }
 
-async function translateExternalId(value: string, type: "seller" | "customer" | "product") {
-  const cuid = MOCK_EXTERNAL_ID_MAP[value];
-  if (!cuid) {
-    throw new Error(`Unknown external ${type} ID: ${value}`);
-  }
-  return cuid;
-}
-
 function calculateTotals(items: Array<{ quantity: number }>) {
+  // TODO: Replace with real product price lookups from platform catalog
   const subtotalMinor = items.reduce((sum, item) => sum + item.quantity * 1000, 0);
   const deliveryFeeMinor = 500;
   const totalMinor = subtotalMinor + deliveryFeeMinor;
@@ -69,25 +52,18 @@ function calculateTotals(items: Array<{ quantity: number }>) {
 }
 
 export async function createV1Order(command: CreateV1OrderCommand, actorSellerId: string): Promise<V1OrderResult> {
-  const translatedSellerId = await translateExternalId(command.sellerId, "seller");
-  const translatedCustomerId = await translateExternalId(command.customerId, "customer");
-  const translatedItems = await Promise.all(
-    command.items.map(async (item) => ({
-      ...item,
-      productId: await translateExternalId(item.productId, "product"),
-    }))
-  );
-
-  if (translatedSellerId !== actorSellerId) {
+  // Verify the requested seller matches the authenticated seller
+  if (command.sellerId !== actorSellerId) {
     throw new Error(
-      `Seller ID mismatch: external ${command.sellerId} maps to ${translatedSellerId}, but authenticated user is ${actorSellerId}`
+      `Seller ID mismatch: requested ${command.sellerId}, but authenticated user is ${actorSellerId}`
     );
   }
 
   return prisma.$transaction(async (tx) => {
+    // Verify customer belongs to the authenticated seller
     const customer = await tx.customer.findFirst({
       where: {
-        id: translatedCustomerId,
+        id: command.customerId,
         sellerId: actorSellerId,
       },
     });
@@ -96,12 +72,12 @@ export async function createV1Order(command: CreateV1OrderCommand, actorSellerId
       throw new Error("Customer not found or does not belong to seller");
     }
 
-    const totals = calculateTotals(translatedItems);
+    const totals = calculateTotals(command.items);
 
     const order = await tx.order.create({
       data: {
         sellerId: actorSellerId,
-        customerId: translatedCustomerId,
+        customerId: command.customerId,
         publicOrderNumber: `ORD-${Date.now()}`,
         status: "PENDING",
         paymentType: command.paymentType,
@@ -112,7 +88,8 @@ export async function createV1Order(command: CreateV1OrderCommand, actorSellerId
         currency: "USD",
         notes: command.notes,
         orderItems: {
-          create: translatedItems.map((item) => ({
+          // TODO: Replace with real product snapshots from platform catalog
+          create: command.items.map((item) => ({
             productId: item.productId,
             productNameSnapshot: `Product ${item.productId}`,
             unitPriceMinor: 1000,
