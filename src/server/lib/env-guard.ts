@@ -45,9 +45,15 @@ export function assertDestructiveOpsAllowed(operation: string, explicitEnv?: str
  * Block seeding in production environments
  */
 export function assertSeedingAllowed(): void {
-  const env = (process.env.APP_ENV || process.env.NODE_ENV || 'development').toLowerCase()
+  const env = process.env.APP_ENV || process.env.NODE_ENV
 
-  if (env === 'production') {
+  if (!env) {
+    throw new Error(
+      '[ENV GUARD] Cannot determine environment. Set NODE_ENV or APP_ENV before running seed.'
+    )
+  }
+
+  if (env.toLowerCase() === 'production') {
     throw new Error(
       '[ENV GUARD] Seeding is strictly prohibited in production environments. ' +
       'This operation could corrupt production data.'
@@ -59,7 +65,13 @@ export function assertSeedingAllowed(): void {
  * Get the current environment configuration
  */
 export function getEnvConfig(): EnvGuardConfig {
-  const appEnv = process.env.APP_ENV || process.env.NODE_ENV || 'development'
+  const appEnv = process.env.APP_ENV || process.env.NODE_ENV
+
+  if (!appEnv) {
+    throw new Error(
+      '[ENV GUARD] Cannot determine environment. Set NODE_ENV or APP_ENV.'
+    )
+  }
 
   return {
     appEnv,

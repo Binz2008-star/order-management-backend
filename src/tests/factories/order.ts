@@ -10,8 +10,11 @@ export interface CreateOrderInput {
     unitPriceMinor?: number
     productNameSnapshot?: string
   }>
-  paymentType?: 'CASH_ON_DELIVERY' | 'CARD' | 'WALLET'
+  status?: string
+  paymentType?: 'CASH_ON_DELIVERY' | 'CARD' | 'WALLET' | 'CASH' | 'PREPAID'
+  paymentStatus?: string
   notes?: string
+  source?: string
 }
 
 export async function createOrder(input: CreateOrderInput) {
@@ -19,8 +22,11 @@ export async function createOrder(input: CreateOrderInput) {
     sellerId,
     customerId,
     items,
+    status = 'PENDING',
     paymentType = 'CASH_ON_DELIVERY',
+    paymentStatus = 'PENDING',
     notes = 'Test order',
+    source,
   } = input
 
   const subtotalMinor = items.reduce(
@@ -36,13 +42,14 @@ export async function createOrder(input: CreateOrderInput) {
         sellerId,
         customerId,
         publicOrderNumber: `ORD-${Date.now()}`,
-        status: 'PENDING',
+        status,
         paymentType,
-        paymentStatus: 'PENDING',
+        paymentStatus,
         subtotalMinor,
         deliveryFeeMinor,
         totalMinor,
         currency: 'USD',
+        ...(source && { source }),
         notes,
         orderItems: {
           create: items.map((item) => ({

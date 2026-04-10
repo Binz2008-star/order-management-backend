@@ -1,6 +1,9 @@
 import { beforeEach, describe, expect, it } from 'vitest'
 import { generatePublicOrderNumber } from '../server/lib/utils'
 import { createOrderEvent } from '../server/services/order-event.service'
+import { createCustomer } from './factories/customer'
+import { createSeller } from './factories/seller'
+import { createUser } from './factories/user'
 import { prisma } from './setup'
 
 describe('Order Creation', () => {
@@ -15,39 +18,11 @@ describe('Order Creation', () => {
   })
 
   it('should create an order with items', async () => {
-    // Import OrderService
     const { OrderService } = await import('../server/services/order.service')
 
-    // Create seller
-    const user = await prisma.user.create({
-      data: {
-        email: `seller-${Date.now()}@example.com`,
-        fullName: 'Test Seller',
-        passwordHash: await (await import('bcryptjs')).hash('password', 12),
-        role: 'SELLER',
-        isActive: true,
-      },
-    })
-
-    const seller = await prisma.seller.create({
-      data: {
-        ownerUserId: user.id,
-        brandName: 'Test Store',
-        slug: 'test-store',
-        currency: 'USD',
-        status: 'ACTIVE',
-      },
-    })
-
-    // Create customer
-    const customer = await prisma.customer.create({
-      data: {
-        sellerId: seller.id,
-        name: 'Test Customer',
-        phone: '+1234567890',
-        addressText: '123 Test St',
-      },
-    })
+    const user = await createUser({ role: 'SELLER' })
+    const seller = await createSeller({ ownerUserId: user.id })
+    const customer = await createCustomer({ sellerId: seller.id })
 
     // Create order using new service (no Product dependency)
     const orderService = new OrderService()

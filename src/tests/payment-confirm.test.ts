@@ -1,11 +1,16 @@
 import { beforeEach, describe, expect, it } from 'vitest'
-import { prisma } from '../../src/server/db/prisma'
-import { PaymentService } from '../../src/server/services/payment.service'
+import { PaymentService } from '../server/services/payment.service'
+import { createCustomer } from './factories/customer'
+import { createOrder } from './factories/order'
+import { createSeller } from './factories/seller'
+import { createUser } from './factories/user'
+import { prisma } from './setup'
 
 describe('PaymentService.confirmPayment', () => {
   beforeEach(async () => {
-    // Clean up test data
+    await prisma.orderEvent.deleteMany()
     await prisma.paymentAttempt.deleteMany()
+    await prisma.orderItem.deleteMany()
     await prisma.order.deleteMany()
     await prisma.customer.deleteMany()
     await prisma.seller.deleteMany()
@@ -13,51 +18,15 @@ describe('PaymentService.confirmPayment', () => {
   })
 
   it('should confirm payment and create events', async () => {
-    // Create test user and seller
-    const user = await prisma.user.create({
-      data: {
-        email: `test-${Date.now()}-${Math.random()}@example.com`,
-        fullName: 'Test User',
-        role: 'SELLER',
-        isActive: true,
-        passwordHash: 'test',
-      },
-    })
-
-    const seller = await prisma.seller.create({
-      data: {
-        ownerUserId: user.id,
-        brandName: 'Test Store',
-        slug: 'test-store',
-        whatsappNumber: '+1234567890',
-        currency: 'USD',
-        status: 'ACTIVE',
-      },
-    })
-
-    // Create customer
-    const customer = await prisma.customer.create({
-      data: {
-        sellerId: seller.id,
-        name: 'Test Customer',
-        phone: '+1234567890',
-      },
-    })
-
-    // Create a test order
-    const order = await prisma.order.create({
-      data: {
-        sellerId: seller.id,
-        customerId: customer.id,
-        publicOrderNumber: 'TEST-001',
-        subtotalMinor: 1000,
-        totalMinor: 1000,
-        currency: 'USD',
-        status: 'PENDING',
-        paymentStatus: 'PENDING',
-        paymentType: 'CASH',
-        source: 'TEST',
-      },
+    const user = await createUser({ role: 'SELLER' })
+    const seller = await createSeller({ ownerUserId: user.id })
+    const customer = await createCustomer({ sellerId: seller.id })
+    const order = await createOrder({
+      sellerId: seller.id,
+      customerId: customer.id,
+      paymentType: 'CASH',
+      source: 'TEST',
+      items: [{ productId: 'test-product-001', quantity: 1, unitPriceMinor: 1000 }],
     })
 
     // Create a payment attempt
@@ -103,51 +72,15 @@ describe('PaymentService.confirmPayment', () => {
   })
 
   it('should be idempotent - duplicate confirmations should not duplicate effects', async () => {
-    // Create test user and seller
-    const user = await prisma.user.create({
-      data: {
-        email: 'test2@example.com',
-        fullName: 'Test User 2',
-        role: 'SELLER',
-        isActive: true,
-        passwordHash: 'test',
-      },
-    })
-
-    const seller = await prisma.seller.create({
-      data: {
-        ownerUserId: user.id,
-        brandName: 'Test Store 2',
-        slug: 'test-store-2',
-        whatsappNumber: '+1234567890',
-        currency: 'USD',
-        status: 'ACTIVE',
-      },
-    })
-
-    // Create customer
-    const customer = await prisma.customer.create({
-      data: {
-        sellerId: seller.id,
-        name: 'Test Customer 2',
-        phone: '+1234567890',
-      },
-    })
-
-    // Create a test order
-    const order = await prisma.order.create({
-      data: {
-        sellerId: seller.id,
-        customerId: customer.id,
-        publicOrderNumber: 'TEST-002',
-        subtotalMinor: 1000,
-        totalMinor: 1000,
-        currency: 'USD',
-        status: 'PENDING',
-        paymentStatus: 'PENDING',
-        paymentType: 'CASH',
-        source: 'TEST',
-      },
+    const user = await createUser({ role: 'SELLER' })
+    const seller = await createSeller({ ownerUserId: user.id })
+    const customer = await createCustomer({ sellerId: seller.id })
+    const order = await createOrder({
+      sellerId: seller.id,
+      customerId: customer.id,
+      paymentType: 'CASH',
+      source: 'TEST',
+      items: [{ productId: 'test-product-001', quantity: 1, unitPriceMinor: 1000 }],
     })
 
     // Create a payment attempt
