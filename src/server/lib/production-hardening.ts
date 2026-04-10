@@ -231,7 +231,7 @@ class ProductionHardening {
             throw new Error('Production cannot use localhost database');
           }
 
-          if (env.REDIS_URL.includes('localhost') || env.REDIS_URL.includes('127.0.0.1')) {
+          if (env.REDIS_URL?.includes('localhost') || env.REDIS_URL?.includes('127.0.0.1')) {
             throw new Error('Production cannot use localhost Redis');
           }
 

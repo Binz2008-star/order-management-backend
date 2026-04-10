@@ -9,9 +9,11 @@
  * - Authentication requirements
  */
 
-import { afterEach, beforeEach, describe, expect, it } from '@jest/globals';
+import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import { productionHardening, productionStartup } from '../server/lib/production-hardening';
 import { RateLimitUtils } from '../server/lib/rate-limiter';
+
+const mutableEnv = process.env as Record<string, string | undefined>;
 
 describe('Production Hardening', () => {
   const originalEnv = process.env;
@@ -42,7 +44,7 @@ describe('Production Hardening', () => {
     });
 
     it('should fail with weak JWT secret in production', async () => {
-      process.env.NODE_ENV = 'production';
+      mutableEnv.NODE_ENV = 'production';
       process.env.JWT_SECRET = 'weak-secret';
       process.env.DATABASE_URL = 'postgresql://test';
       process.env.REDIS_URL = 'redis://test';
@@ -56,7 +58,7 @@ describe('Production Hardening', () => {
     });
 
     it('should fail with localhost database in production', async () => {
-      process.env.NODE_ENV = 'production';
+      mutableEnv.NODE_ENV = 'production';
       process.env.JWT_SECRET = 'strong-enough-secret-for-production-32chars';
       process.env.DATABASE_URL = 'postgresql://localhost:5432/test';
       process.env.REDIS_URL = 'redis://redis.example.com';
@@ -70,7 +72,7 @@ describe('Production Hardening', () => {
     });
 
     it('should pass with valid production configuration', async () => {
-      process.env.NODE_ENV = 'production';
+      mutableEnv.NODE_ENV = 'production';
       process.env.JWT_SECRET = 'strong-enough-secret-for-production-32chars';
       process.env.DATABASE_URL = 'postgresql://prod.example.com:5432/db';
       process.env.REDIS_URL = 'redis://redis.example.com';
@@ -114,14 +116,14 @@ describe('Production Hardening', () => {
 
   describe('Production Startup', () => {
     it('should skip hardening in development mode', async () => {
-      process.env.NODE_ENV = 'development';
+      mutableEnv.NODE_ENV = 'development';
 
       // Should not throw error in development mode
       await expect(productionStartup()).resolves.not.toThrow();
     });
 
     it('should fail fast in production mode with missing requirements', async () => {
-      process.env.NODE_ENV = 'production';
+      mutableEnv.NODE_ENV = 'production';
       // Missing required env vars
 
       await expect(productionStartup()).rejects.toThrow();
@@ -213,7 +215,7 @@ describe('Production Failure Gates', () => {
 
       try {
         await productionHardening.initialize();
-      } catch (error) {
+      } catch {
         // Should timeout and fail gracefully, not hang
         const duration = Date.now() - startTime;
         expect(duration).toBeLessThan(30000); // Should complete within 30 seconds
@@ -225,7 +227,7 @@ describe('Production Failure Gates', () => {
 describe('Production Security Validation', () => {
   describe('Secret Management', () => {
     it('should reject development secrets in production', async () => {
-      process.env.NODE_ENV = 'production';
+      mutableEnv.NODE_ENV = 'production';
       process.env.JWT_SECRET = 'dev-secret';
       process.env.DATABASE_URL = 'postgresql://prod.example.com:5432/db';
       process.env.REDIS_URL = 'redis://redis.example.com';
@@ -239,7 +241,7 @@ describe('Production Security Validation', () => {
     });
 
     it('should reject test secrets in production', async () => {
-      process.env.NODE_ENV = 'production';
+      mutableEnv.NODE_ENV = 'production';
       process.env.JWT_SECRET = 'test-secret';
       process.env.DATABASE_URL = 'postgresql://prod.example.com:5432/db';
       process.env.REDIS_URL = 'redis://redis.example.com';
@@ -255,7 +257,7 @@ describe('Production Security Validation', () => {
 
   describe('Network Security', () => {
     it('should reject localhost Redis in production', async () => {
-      process.env.NODE_ENV = 'production';
+      mutableEnv.NODE_ENV = 'production';
       process.env.JWT_SECRET = 'strong-enough-secret-for-production-32chars';
       process.env.DATABASE_URL = 'postgresql://prod.example.com:5432/db';
       process.env.REDIS_URL = 'redis://localhost:6379';

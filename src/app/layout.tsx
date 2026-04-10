@@ -1,5 +1,4 @@
 import type { Metadata } from "next";
-import { Analytics } from "@vercel/analytics/next";
 import "./globals.css";
 
 // Validate production environment on startup (single entry point)
@@ -28,7 +27,6 @@ export default function RootLayout({
     >
       <body className="min-h-full flex flex-col">
         {children}
-        <Analytics />
       </body>
     </html>
   );
