@@ -1,6 +1,10 @@
 import type { Customer, Order, Seller } from '@prisma/client'
-import { prisma } from '../../server/db/prisma'
 import { PaymentService } from '../../server/services/payment.service'
+import { createCustomer } from '../factories/customer'
+import { createOrder } from '../factories/order'
+import { createSeller } from '../factories/seller'
+import { createUser } from '../factories/user'
+import { prisma } from '../setup'
 
 describe('Payment Service - Atomic Operations', () => {
   let seller: Seller
@@ -8,7 +12,6 @@ describe('Payment Service - Atomic Operations', () => {
   let order: Order
 
   beforeEach(async () => {
-    // Clean setup for each test
     await prisma.orderEvent.deleteMany()
     await prisma.paymentAttempt.deleteMany()
     await prisma.orderItem.deleteMany()
@@ -17,65 +20,18 @@ describe('Payment Service - Atomic Operations', () => {
     await prisma.seller.deleteMany()
     await prisma.user.deleteMany()
 
-    // Create test user first
-    const user = await prisma.user.create({
-      data: {
-        id: `user_${Date.now()}`,
-        email: `user_${Date.now()}@test.com`,
-        fullName: 'Test User',
-        passwordHash: 'hashed_password',
-        isActive: true
-      }
-    })
-
-    // Create test data
-    seller = await prisma.seller.create({
-      data: {
-        id: `seller_${Date.now()}`,
-        ownerUserId: user.id,
-        brandName: 'Test Brand',
-        slug: `test-brand-${Date.now()}`
-      }
-    })
-
-    customer = await prisma.customer.create({
-      data: {
-        id: `customer_${Date.now()}`,
-        sellerId: seller.id,
-        name: 'Test Customer',
-        phone: '+1234567890'
-      }
-    })
-
-    order = await prisma.order.create({
-      data: {
-        id: `order_${Date.now()}`,
-        customerId: customer.id,
-        sellerId: seller.id,
-        publicOrderNumber: `ORD-${Date.now()}`,
-        status: 'PENDING',
-        paymentStatus: 'PENDING',
-        paymentType: 'PREPAID',
-        subtotalMinor: 2000,
-        totalMinor: 2000,
-        currency: 'USD'
-      }
-    })
-
-    await prisma.orderItem.create({
-      data: {
-        orderId: order.id,
-        productId: 'test-product-id',
-        quantity: 2,
-        unitPriceMinor: 1000,
-        lineTotalMinor: 2000,
-        productNameSnapshot: 'Test Product'
-      }
+    const user = await createUser({ role: 'SELLER' })
+    seller = await createSeller({ ownerUserId: user.id })
+    customer = await createCustomer({ sellerId: seller.id })
+    order = await createOrder({
+      sellerId: seller.id,
+      customerId: customer.id,
+      paymentType: 'PREPAID',
+      items: [{ productId: 'test-product-id', quantity: 2, unitPriceMinor: 1000, productNameSnapshot: 'Test Product' }],
     })
   })
 
   afterEach(async () => {
-    // Cleanup
     await prisma.orderEvent.deleteMany()
     await prisma.paymentAttempt.deleteMany()
     await prisma.orderItem.deleteMany()
@@ -100,11 +56,11 @@ describe('Payment Service - Atomic Operations', () => {
     expect(updatedOrder?.paymentStatus).toBe('PENDING')
     expect(updatedOrder?.status).toBe('PENDING')
 
-    // Verify event created
+    // Verify event created (factory creates order_created, then payment_initiated)
     const events = await prisma.orderEvent.findMany({ where: { orderId: order.id } })
-    expect(events).toHaveLength(1)
-    expect(events[0].eventType).toBe('payment_initiated')
-    expect(events[0].actorUserId).toBe('user-123')
+    const paymentEvents = events.filter(e => e.eventType === 'payment_initiated')
+    expect(paymentEvents).toHaveLength(1)
+    expect(paymentEvents[0].actorUserId).toBe('user-123')
   })
 
   test('atomic payment completion - all changes succeed or fail together', async () => {
@@ -317,20 +273,11 @@ describe('Payment Service - Atomic Operations', () => {
   })
 
   test('COD payment attempts rejected - invariant enforced', async () => {
-    // Create COD order
-    const codOrder = await prisma.order.create({
-      data: {
-        id: `cod_order_${Date.now()}`,
-        customerId: customer.id,
-        sellerId: seller.id,
-        publicOrderNumber: `COD-${Date.now()}`,
-        status: 'PENDING',
-        paymentStatus: 'PENDING',
-        paymentType: 'CASH_ON_DELIVERY',
-        subtotalMinor: 2000,
-        totalMinor: 2000,
-        currency: 'USD'
-      }
+    const codOrder = await createOrder({
+      sellerId: seller.id,
+      customerId: customer.id,
+      paymentType: 'CASH_ON_DELIVERY',
+      items: [{ productId: 'test-product-id', quantity: 2, unitPriceMinor: 1000 }],
     })
 
     // Try to create payment attempt on COD order
@@ -349,9 +296,9 @@ describe('Payment Service - Atomic Operations', () => {
     })
     expect(paymentAttempts).toHaveLength(0)
 
-    // Verify no events created
+    // Verify no payment events created (only factory's order_created exists)
     const events = await prisma.orderEvent.findMany({
-      where: { orderId: codOrder.id }
+      where: { orderId: codOrder.id, eventType: { not: 'order_created' } }
     })
     expect(events).toHaveLength(0)
   })

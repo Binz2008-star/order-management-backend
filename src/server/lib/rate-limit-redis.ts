@@ -410,11 +410,26 @@ export class RateLimiter {
   }
 
   async isAllowed(request: NextRequest): Promise<RateLimitCheckResult | null> {
+    const disableRateLimiting = process.env.DISABLE_RATE_LIMITING === 'true'
+
+    if (disableRateLimiting && (process.env.NODE_ENV === 'test' || process.env.VITEST === 'true')) {
+      return {
+        allowed: true,
+        remaining: Infinity,
+        resetTime: Date.now() + 60000,
+      }
+    }
+
     const key = this.getKey(request)
     await this.ensureStoreInitialized()
 
     if (!this.primaryStore) {
-      return this.handleStoreFailure(key, new Error('No distributed rate-limit store configured'))
+      if (this.shouldFailClosed()) {
+        logger.error('Rate limiting store unavailable and policy is fail-closed')
+        return null
+      }
+
+      return this.memoryStore.check(key, this.config.maxRequests, this.config.windowMs)
     }
 
     try {

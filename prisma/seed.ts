@@ -1,5 +1,9 @@
+import { assertSeedingAllowed } from '@/server/lib/env-guard'
 import { PrismaClient } from '@prisma/client'
 import bcrypt from 'bcryptjs'
+
+// Block seeding in production environments
+assertSeedingAllowed()
 
 const prisma = new PrismaClient()
 

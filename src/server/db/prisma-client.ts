@@ -1,13 +1,15 @@
-// Temporary workaround for Prisma client generation issues
 import { PrismaClient as GeneratedPrismaClient } from '@prisma/client'
 
-// Create a mock client for now
+if (!process.env.DATABASE_URL) {
+  throw new Error('[DB FATAL] DATABASE_URL is not set. Cannot initialize Prisma client.')
+}
+
 export const prisma = new GeneratedPrismaClient({
   datasources: {
     db: {
-      url: process.env.DATABASE_URL || 'file:./dev.db'
-    }
-  }
+      url: process.env.DATABASE_URL,
+    },
+  },
 })
 
 export type PrismaClient = GeneratedPrismaClient

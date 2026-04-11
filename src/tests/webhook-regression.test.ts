@@ -1,11 +1,16 @@
 import { beforeEach, describe, expect, it } from 'vitest'
-import { prisma } from '../../src/server/db/prisma'
-import { PaymentService } from '../../src/server/services/payment.service'
+import { PaymentService } from '../server/services/payment.service'
+import { createCustomer } from './factories/customer'
+import { createOrder } from './factories/order'
+import { createSeller } from './factories/seller'
+import { createUser } from './factories/user'
+import { prisma } from './setup'
 
 describe('Stripe Webhook Event Enforcement Regression Tests', () => {
   beforeEach(async () => {
-    // Clean up test data
+    await prisma.orderEvent.deleteMany()
     await prisma.paymentAttempt.deleteMany()
+    await prisma.orderItem.deleteMany()
     await prisma.order.deleteMany()
     await prisma.customer.deleteMany()
     await prisma.seller.deleteMany()
@@ -13,51 +18,16 @@ describe('Stripe Webhook Event Enforcement Regression Tests', () => {
   })
 
   async function createTestOrder(status: string = 'PENDING') {
-    // Create test user and seller
-    const user = await prisma.user.create({
-      data: {
-        email: `test-${Date.now()}-${Math.random()}@example.com`,
-        fullName: 'Test User',
-        role: 'SELLER',
-        isActive: true,
-        passwordHash: 'test',
-      },
-    })
-
-    const seller = await prisma.seller.create({
-      data: {
-        ownerUserId: user.id,
-        brandName: 'Test Store',
-        slug: 'test-store',
-        whatsappNumber: '+1234567890',
-        currency: 'USD',
-        status: 'ACTIVE',
-      },
-    })
-
-    // Create customer
-    const customer = await prisma.customer.create({
-      data: {
-        sellerId: seller.id,
-        name: 'Test Customer',
-        phone: '+1234567890',
-      },
-    })
-
-    // Create a test order
-    return await prisma.order.create({
-      data: {
-        sellerId: seller.id,
-        customerId: customer.id,
-        publicOrderNumber: 'TEST-001',
-        subtotalMinor: 1000,
-        totalMinor: 1000,
-        currency: 'USD',
-        status,
-        paymentStatus: 'PENDING',
-        paymentType: 'CASH',
-        source: 'TEST',
-      },
+    const user = await createUser({ role: 'SELLER' })
+    const seller = await createSeller({ ownerUserId: user.id })
+    const customer = await createCustomer({ sellerId: seller.id })
+    return createOrder({
+      sellerId: seller.id,
+      customerId: customer.id,
+      status,
+      paymentType: 'CASH',
+      source: 'TEST',
+      items: [{ productId: 'test-product-001', quantity: 1, unitPriceMinor: 1000 }],
     })
   }
 
@@ -300,13 +270,15 @@ describe('Stripe Webhook Event Enforcement Regression Tests', () => {
         orderBy: { createdAt: 'asc' },
       })
 
-      expect(events.length).toBe(3)
-      expect(events[0].eventType).toBe('payment_initiated')
-      expect(events[1].eventType).toBe('payment_completed')
-      expect(events[2].eventType).toBe('status_changed')
+      // Factory creates order_created, then payment flow adds 3 more
+      const paymentEvents = events.filter(e => e.eventType !== 'order_created')
+      expect(paymentEvents.length).toBe(3)
+      expect(paymentEvents[0].eventType).toBe('payment_initiated')
+      expect(paymentEvents[1].eventType).toBe('payment_completed')
+      expect(paymentEvents[2].eventType).toBe('status_changed')
 
       // Verify status_changed event payload is truthful
-      const statusChangeEvent = events[2]
+      const statusChangeEvent = paymentEvents[2]
       const payload = JSON.parse(statusChangeEvent.payloadJson || '{}')
       expect(payload.from).toBe('PENDING')
       expect(payload.to).toBe('CONFIRMED')

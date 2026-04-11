@@ -1,5 +1,9 @@
+import { assertDestructiveOpsAllowed } from '@/server/lib/env-guard'
 import { PrismaClient } from '@prisma/client'
 import { afterAll, beforeAll, beforeEach, vi } from 'vitest'
+
+// Ensure destructive operations are only allowed in test environments
+assertDestructiveOpsAllowed('test setup')
 
 vi.mock('next/server', () => ({
   NextRequest: class MockNextRequest {
@@ -68,11 +72,22 @@ afterAll(async () => {
 })
 
 beforeEach(async () => {
-  await prisma.orderEvent.deleteMany()
-  await prisma.paymentAttempt.deleteMany()
-  await prisma.orderItem.deleteMany()
-  await prisma.order.deleteMany()
-  await prisma.customer.deleteMany()
+  // Get test order ID to preserve it
+  const testOrderId = (globalThis as { testOrderId?: string }).testOrderId;
+
+  await prisma.orderEvent.deleteMany({
+    where: testOrderId ? { orderId: { not: testOrderId } } : undefined,
+  })
+  await prisma.paymentAttempt.deleteMany({
+    where: testOrderId ? { orderId: { not: testOrderId } } : undefined,
+  })
+  await prisma.orderItem.deleteMany({
+    where: testOrderId ? { orderId: { not: testOrderId } } : undefined,
+  })
+  await prisma.order.deleteMany({
+    where: testOrderId ? { id: { not: testOrderId } } : undefined,
+  })
+  // Note: Don't delete customers - they're needed for contract tests
 })
 
 declare global {
