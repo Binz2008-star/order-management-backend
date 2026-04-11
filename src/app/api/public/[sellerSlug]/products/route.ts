@@ -1,37 +1,23 @@
-import { prisma } from '@/server/db/prisma'
 import { NextRequest, NextResponse } from 'next/server'
 
-// Pure GET endpoint - no mutations, only reads product catalog data
-async function getPublicProducts(
+/**
+ * Runtime Query API - Seller Information Only
+ *
+ * This endpoint provides seller metadata for public storefront queries.
+ * Product catalog data must come from the platform domain.
+ */
+async function getPublicSellerInfo(
   { sellerSlug }: { sellerSlug: string },
   _request: NextRequest
 ): Promise<NextResponse> {
-  // Find seller by slug
-  const seller = await prisma.seller.findUnique({
-    where: { slug: sellerSlug },
-  })
-
-  if (!seller) {
-    return NextResponse.json(
-      { error: 'Seller not found' },
-      { status: 404 }
-    )
-  }
-
-  // Get active products for this seller
-  // TODO: This should query the platform database, not runtime
-  // For now, return empty array since Product model moved to platform
-  const products: never[] = []
+  // TODO: Implement seller lookup from runtime database
+  // For now, return error to indicate platform dependency
 
   return NextResponse.json({
-    seller: {
-      id: seller.id,
-      brandName: seller.brandName,
-      slug: seller.slug,
-      currency: seller.currency,
-    },
-    products: products, // Empty array - Product model moved to platform
-  })
+    error: 'Product catalog queries must go to platform domain',
+    message: 'This endpoint violates runtime boundary - use platform API for product data',
+    platformApiUrl: `${process.env.PLATFORM_API_URL || 'http://localhost:3001'}/api/public/${sellerSlug}/products`
+  }, { status: 422 })
 }
 
 export async function GET(
@@ -40,7 +26,7 @@ export async function GET(
 ) {
   try {
     const { sellerSlug } = await params
-    return getPublicProducts({ sellerSlug }, request)
+    return getPublicSellerInfo({ sellerSlug }, request)
   } catch (_error) {
     return NextResponse.json(
       { error: 'Invalid parameters' },

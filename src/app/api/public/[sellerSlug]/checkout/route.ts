@@ -1,17 +1,13 @@
-import { NextRequest, NextResponse } from "next/server";
-import { z } from "zod";
+import { prisma } from '@/server/db/prisma';
+import { calculateOrderTotals, validateOrderItems } from '@/server/lib/order-validation';
+import { generatePublicOrderNumber } from "@/server/lib/utils";
+import { NextRequest, NextResponse } from 'next/server';
+import { z } from 'zod';
 
-import { prisma } from "@/server/db/prisma";
-import {
-  calculateOrderTotal,
-  generatePublicOrderNumber,
-} from "@/server/lib/utils";
-import { createOrderEvent } from "@/server/services/order-event.service";
-
-const createOrderSchema = z.object({
-  customerName: z.string().min(1).max(120),
-  customerPhone: z.string().min(5).max(30),
-  addressText: z.string().min(1).max(500),
+const checkoutSchema = z.object({
+  customerName: z.string().min(1, 'Customer name is required'),
+  customerPhone: z.string().min(1, 'Customer phone is required'),
+  addressText: z.string().optional(),
   items: z
     .array(
       z.object({
@@ -19,19 +15,21 @@ const createOrderSchema = z.object({
         quantity: z.number().int().positive(),
       })
     )
-    .min(1),
-  notes: z.string().max(1000).optional(),
-});
+    .min(1, 'At least one item is required'),
+  notes: z.string().optional(),
+  deliveryFeeMinor: z.number().int().min(0).default(0),
+})
 
 export async function POST(
   request: NextRequest,
   { params }: { params: Promise<{ sellerSlug: string }> }
 ) {
   try {
-    const { sellerSlug } = await params;
-    const rawBody = await request.json();
-    const body = createOrderSchema.parse(rawBody);
+    const { sellerSlug } = await params
+    const body = await request.json()
+    const parsedBody = checkoutSchema.parse(body)
 
+    // Find seller
     const seller = await prisma.seller.findUnique({
       where: { slug: sellerSlug },
       select: {
@@ -40,80 +38,67 @@ export async function POST(
         currency: true,
         slug: true,
       },
-    });
+    })
 
     if (!seller) {
       return NextResponse.json({ error: "Seller not found" }, { status: 404 });
     }
 
-    // Products now handled by platform layer - validate productIds externally
-    const _requestedProductIds = [...new Set(body.items.map((i) => i.productId))];
+    // Validate order items against platform catalog
+    const validatedItems = await validateOrderItems(seller.id, parsedBody.items);
 
-    // TODO: Validate productIds against platform API
-    // For now, accept all productIds as valid (platform validation needed)
-
-    // Product validation moved to platform layer
-    // Runtime only stores product snapshots from request data
-
-    const pricedItems = body.items.map((item: { productId: string; quantity: number }) => ({
-      productId: item.productId,
-      productNameSnapshot: `Product ${item.productId}`,
-      unitPriceMinor: 0, // TODO: Get from platform API
-      quantity: item.quantity,
-      lineTotalMinor: 0, // TODO: Calculate with real price
-    }));
-
-    const totals = calculateOrderTotal(
-      pricedItems.map((item) => ({
-        unitPriceMinor: item.unitPriceMinor,
-        quantity: item.quantity,
-      })),
-      0
+    // Calculate order totals
+    const { subtotalMinor, deliveryFeeMinor, totalMinor } = calculateOrderTotals(
+      validatedItems,
+      parsedBody.deliveryFeeMinor
     );
 
-    const created = await prisma.$transaction(async (tx) => {
-      const customer = await tx.customer.upsert({
-        where: {
-          sellerId_phone: {
-            sellerId: seller.id,
-            phone: body.customerPhone,
-          },
-        },
-        update: {
-          name: body.customerName,
-          addressText: body.addressText,
-        },
-        create: {
+    // Create customer if not exists
+    const customer = await prisma.customer.upsert({
+      where: {
+        sellerId_phone: {
           sellerId: seller.id,
-          name: body.customerName,
-          phone: body.customerPhone,
-          addressText: body.addressText,
+          phone: parsedBody.customerPhone,
         },
-      });
+      },
+      update: {
+        name: parsedBody.customerName,
+        addressText: parsedBody.addressText,
+      },
+      create: {
+        sellerId: seller.id,
+        name: parsedBody.customerName,
+        phone: parsedBody.customerPhone,
+        addressText: parsedBody.addressText,
+      },
+    });
 
-      // Product stock management moved to platform layer
-      // Runtime only stores order data with product snapshots
+    // Generate public order number
+    const publicOrderNumber = generatePublicOrderNumber();
 
-      const order = await tx.order.create({
+    // Create order with transaction
+    const order = await prisma.$transaction(async (tx) => {
+      const newOrder = await tx.order.create({
         data: {
           sellerId: seller.id,
           customerId: customer.id,
-          publicOrderNumber: generatePublicOrderNumber(),
-          subtotalMinor: totals.subtotalMinor,
-          deliveryFeeMinor: totals.deliveryFeeMinor,
-          totalMinor: totals.totalMinor,
+          publicOrderNumber,
+          status: "PENDING",
+          paymentType: "CASH_ON_DELIVERY",
+          paymentStatus: "PENDING",
+          subtotalMinor,
+          deliveryFeeMinor,
+          totalMinor,
           currency: seller.currency,
           source: "public_api",
-          notes: body.notes ?? "",
-          status: "PENDING",
-          paymentStatus: "PENDING",
+          notes: parsedBody.notes,
         },
       });
 
-      // Create order items
+      // Create order items with validated platform data
       await tx.orderItem.createMany({
-        data: pricedItems.map((item) => ({
-          orderId: order.id,
+        data: validatedItems.map((item) => ({
+          orderId: newOrder.id,
           productId: item.productId,
           productNameSnapshot: item.productNameSnapshot,
           unitPriceMinor: item.unitPriceMinor,
@@ -122,50 +107,35 @@ export async function POST(
         })),
       });
 
-      // Create order event using centralized event authority
-      await createOrderEvent(tx, {
-        orderId: order.id,
-        actorUserId: null, // Public API - no actor
-        eventType: "order_created",
-        payload: {
-          source: "public_api",
-          customerPhone: body.customerPhone,
-          itemCount: body.items.length,
-        },
-      });
-
-      return { order, customer };
-    }, { timeout: 15000, maxWait: 5000 });
+      return newOrder;
+    });
 
     // Fetch the complete order with items
     const orderWithItems = await prisma.order.findUnique({
-      where: { id: created.order.id },
+      where: { id: order.id },
       include: {
         orderItems: true,
       },
     });
 
-    return NextResponse.json(
-      {
-        id: orderWithItems!.id,
-        publicOrderNumber: orderWithItems!.publicOrderNumber,
-        status: orderWithItems!.status,
-        paymentStatus: orderWithItems!.paymentStatus,
-        subtotalMinor: orderWithItems!.subtotalMinor,
-        deliveryFeeMinor: orderWithItems!.deliveryFeeMinor,
-        totalMinor: orderWithItems!.totalMinor,
-        currency: orderWithItems!.currency,
-        customer: {
-          id: created.customer.id,
-          name: created.customer.name,
-          phone: created.customer.phone,
-          addressText: created.customer.addressText,
-        },
-        items: orderWithItems!.orderItems,
-        createdAt: orderWithItems!.createdAt,
+    return NextResponse.json({
+      id: orderWithItems!.id,
+      publicOrderNumber: orderWithItems!.publicOrderNumber,
+      status: orderWithItems!.status,
+      paymentStatus: orderWithItems!.paymentStatus,
+      subtotalMinor: orderWithItems!.subtotalMinor,
+      deliveryFeeMinor: orderWithItems!.deliveryFeeMinor,
+      totalMinor: orderWithItems!.totalMinor,
+      currency: orderWithItems!.currency,
+      customer: {
+        id: customer.id,
+        name: customer.name,
+        phone: customer.phone,
+        addressText: customer.addressText,
       },
-      { status: 201 }
-    );
+      items: orderWithItems!.orderItems,
+      createdAt: orderWithItems!.createdAt,
+    }, { status: 201 });
   } catch (error) {
     console.error("Create order error:", error);
 
