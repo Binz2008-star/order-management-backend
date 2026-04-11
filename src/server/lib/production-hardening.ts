@@ -38,7 +38,8 @@ class ProductionHardening {
   }
 
   /**
-   * Initialize production hardening with fail-fast validation
+   * Initialize production hardening with validation
+   * Returns complete status without exiting the process
    */
   async initialize(): Promise<HardeningStatus> {
     const startTime = Date.now();
@@ -46,7 +47,7 @@ class ProductionHardening {
 
     console.log('=== Production Hardening Initialization ===');
 
-    // Critical checks - fail fast if any fail
+    // Critical checks - record failures but don't exit
     for (const check of this.healthChecks.filter(c => c.critical)) {
       const checkStart = Date.now();
       try {
@@ -65,15 +66,17 @@ class ProductionHardening {
 
         if (!passed) {
           console.error(`CRITICAL HEALTH CHECK FAILED: ${check.name}`);
-          console.error('Production hardening failed - startup aborted');
-          process.exit(1);
+        } else {
+          console.log(`PASS: ${check.name}`);
         }
-
-        console.log(`PASS: ${check.name}`);
       } catch (error) {
         console.error(`CRITICAL HEALTH CHECK ERROR: ${check.name}`, error);
-        console.error('Production hardening failed - startup aborted');
-        process.exit(1);
+        results.push({
+          name: check.name,
+          status: 'fail',
+          message: `Critical check error: ${error instanceof Error ? error.message : 'Unknown error'}`,
+          duration: Date.now() - checkStart
+        });
       }
     }
 
@@ -112,13 +115,18 @@ class ProductionHardening {
     }
 
     const startupDuration = Date.now() - startTime;
-    const allPassed = results.every(r => r.status !== 'fail');
+    const healthy = results.every(r => r.status !== 'fail');
 
     console.log(`=== Production Hardening Complete (${startupDuration}ms) ===`);
-    console.log(`Status: ${allPassed ? 'HEALTHY' : 'DEGRADED'}`);
+    console.log(`Status: ${healthy ? 'HEALTHY' : 'DEGRADED'}`);
+
+    // Cleanup resources if unhealthy
+    if (!healthy) {
+      await this.cleanup();
+    }
 
     return {
-      healthy: allPassed,
+      healthy,
       checks: results,
       startupDuration
     };
@@ -324,6 +332,7 @@ export const productionHardening = new ProductionHardening();
 
 /**
  * Production startup middleware
+ * This is the only place that calls process.exit
  */
 export async function productionStartup(): Promise<void> {
   if (env.NODE_ENV === 'production') {
@@ -331,6 +340,12 @@ export async function productionStartup(): Promise<void> {
 
     if (!status.healthy) {
       console.error('Production startup failed - system not healthy');
+      console.error('Failed critical checks:',
+        status.checks
+          .filter(c => c.status === 'fail')
+          .map(c => c.name)
+          .join(', ')
+      );
       process.exit(1);
     }
 
