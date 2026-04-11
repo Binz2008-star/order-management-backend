@@ -1,0 +1,13 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(systeminfo)",
+      "Bash(findstr *)",
+      "Bash(wmic *)",
+      "Bash(dir *)",
+      "Bash(python *)",
+      "Bash(ollama *)"
+    ]
+  },
+  "$version": 3
+}

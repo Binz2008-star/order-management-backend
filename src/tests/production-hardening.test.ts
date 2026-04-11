@@ -6,6 +6,30 @@
  */
 
 import { beforeEach, describe, expect, it, vi } from 'vitest';
+
+// Mock Redis client to prevent real network connections
+vi.doMock('redis', () => ({
+  createClient: vi.fn(() => ({
+    connect: vi.fn().mockResolvedValue(undefined),
+    ping: vi.fn().mockResolvedValue('PONG'),
+    quit: vi.fn().mockResolvedValue('OK'),
+    isOpen: true,
+    setEx: vi.fn().mockResolvedValue('OK'),
+    get: vi.fn().mockResolvedValue('1'),
+    incr: vi.fn().mockResolvedValue(1)
+  }))
+}));
+
+// Mock Prisma client to prevent real database connections
+vi.doMock('@prisma/client', () => ({
+  PrismaClient: class {
+    constructor() { }
+    $queryRaw = vi.fn().mockResolvedValue([{ '?column?': 1 }]);
+    $disconnect = vi.fn().mockResolvedValue(undefined);
+  }
+}));
+
+// Import after mocks are established
 import { productionHardening, runProductionHardening, setupGracefulShutdown } from '../server/lib/production-hardening';
 
 describe('Production Hardening - Minimal Correctness Contract', () => {
@@ -144,7 +168,8 @@ describe('Production Hardening - Minimal Correctness Contract', () => {
       const mockCreateClient = vi.fn(() => ({
         connect: vi.fn(() => new Promise(resolve => setTimeout(resolve, 30000))), // 30 second hang
         ping: vi.fn(() => Promise.resolve('PONG')),
-        quit: vi.fn(() => Promise.resolve())
+        quit: vi.fn(() => Promise.resolve()),
+        isOpen: true
       }));
 
       vi.doMock('redis', () => ({ createClient: mockCreateClient }));

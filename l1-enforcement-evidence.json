@@ -1,0 +1,52 @@
+{
+  "metadata": {
+    "timestamp": "2026-04-10T16:09:49Z",
+    "run_id": "local",
+    "repo": "order-management-backend",
+    "branch": "local",
+    "layer": "L1",
+    "enforcement_version": "hardened-v2.2",
+    "duration_seconds": 32,
+    "script_version": "2.0.0"
+  },
+  "enforcement_checks": {
+    "cross_domain_boundaries": {
+      "status": "FAIL",
+      "violations": 38,
+      "description": "API routes importing server layer or bypassing boundaries"
+    },
+    "schema_authority": {
+      "status": "FAIL",
+      "violations": 21,
+      "description": "Schema duplication, unauthorized files, or database connections"
+    },
+    "authentication_authority": {
+      "status": "PASS",
+      "violations": 0,
+      "description": "Auth logic, password handling, or session management in API routes"
+    },
+    "rate_limiting_authority": {
+      "status": "PASS",
+      "violations": 0,
+      "description": "In-memory rate limiting or Redis configuration in API routes"
+    },
+    "environment_authority": {
+      "status": "PASS",
+      "violations": 0,
+      "description": "Hardcoded secrets or direct process.env usage"
+    }
+  },
+  "summary": {
+    "total_violations": 59,
+    "enforcement_result": "FAIL",
+    "compliance_level": "L1_VIOLATIONS",
+    "governance_status": "NON_COMPLIANT",
+    "violation_breakdown": {
+      "cross_domain": 38,
+      "schema": 21,
+      "auth": 0,
+      "rate_limit": 0,
+      "environment": 0
+    }
+  }
+}

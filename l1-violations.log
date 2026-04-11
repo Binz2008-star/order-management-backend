@@ -1,0 +1,113 @@
+[SERVER_LIB_IMPORT] src/app/api/auth/login/route.ts:4 - server/lib import
+[SERVER_LIB_IMPORT] src/app/api/auth/login/route.ts:5 - server/lib import
+[SERVER_LIB_IMPORT] src/app/api/auth/login/route.ts:6 - server/lib import
+[SERVER_LIB_IMPORT] src/app/api/auth/login/route.ts:7 - server/lib import
+[SERVER_LIB_IMPORT] src/app/api/cron/reconcile-payments/route.ts:1 - server/lib import
+[SERVER_LIB_IMPORT] src/app/api/me/route.ts:1 - server/lib import
+[SERVER_LIB_IMPORT] src/app/api/public/[sellerSlug]/checkout/route.ts:8 - server/lib import
+[SERVER_LIB_IMPORT] src/app/api/seller/orders/route.ts:2 - server/lib import
+[SERVER_LIB_IMPORT] src/app/api/seller/orders/route.ts:3 - server/lib import
+[SERVER_LIB_IMPORT] src/app/api/seller/orders/route.ts:4 - server/lib import
+[SERVER_LIB_IMPORT] src/app/api/seller/orders/[id]/events/route.ts:2 - server/lib import
+[SERVER_LIB_IMPORT] src/app/api/seller/orders/[id]/events/route.ts:3 - server/lib import
+[SERVER_LIB_IMPORT] src/app/api/seller/orders/[id]/payments/create/route.ts:2 - server/lib import
+[SERVER_LIB_IMPORT] src/app/api/seller/orders/[id]/payments/create/route.ts:3 - server/lib import
+[SERVER_LIB_IMPORT] src/app/api/seller/orders/[id]/payments/route.ts:2 - server/lib import
+[SERVER_LIB_IMPORT] src/app/api/seller/orders/[id]/payments/route.ts:3 - server/lib import
+[SERVER_LIB_IMPORT] src/app/api/seller/orders/[id]/route.ts:2 - server/lib import
+[SERVER_LIB_IMPORT] src/app/api/seller/orders/[id]/status/route.ts:2 - server/lib import
+[SERVER_LIB_IMPORT] src/app/api/seller/orders/[id]/status/route.ts:3 - server/lib import
+[SERVER_LIB_IMPORT] src/app/api/seller/orders/[id]/status/route.ts:4 - server/lib import
+[SERVER_LIB_IMPORT] src/app/api/seller/payments/[paymentAttemptId]/refund/route.ts:2 - server/lib import
+[SERVER_LIB_IMPORT] src/app/api/seller/payments/[paymentAttemptId]/refund/route.ts:3 - server/lib import
+[SERVER_LIB_IMPORT] src/app/api/seller/payments/[paymentAttemptId]/status/route.ts:2 - server/lib import
+[SERVER_LIB_IMPORT] src/app/api/seller/payments/[paymentAttemptId]/status/route.ts:3 - server/lib import
+[SERVER_LIB_IMPORT] src/app/api/v1/orders/route.ts:2 - server/lib import
+[SERVER_LIB_IMPORT] src/app/api/v1/orders/[id]/route.ts:2 - server/lib import
+[SERVER_LIB_IMPORT] src/app/api/webhooks/stripe/route.ts:2 - server/lib import
+[SERVER_LIB_IMPORT] src/app/api/webhooks/whatsapp/route.ts:2 - server/lib import
+[SERVER_LIB_IMPORT] src/app/app/api/auth/login/route.ts:4 - server/lib import
+[SERVER_LIB_IMPORT] src/app/app/api/auth/login/route.ts:5 - server/lib import
+[SERVER_LIB_IMPORT] src/app/app/api/auth/login/route.ts:6 - server/lib import
+[SERVER_LIB_IMPORT] src/app/app/api/auth/login/route.ts:7 - server/lib import
+[SERVER_LIB_IMPORT] src/app/app/api/cron/reconcile-payments/route.ts:1 - server/lib import
+[SERVER_LIB_IMPORT] src/app/app/api/me/route.ts:1 - server/lib import
+[SERVER_LIB_IMPORT] src/app/app/api/public/[sellerSlug]/checkout/route.ts:8 - server/lib import
+[SERVER_LIB_IMPORT] src/app/app/api/seller/orders/route.ts:2 - server/lib import
+[SERVER_LIB_IMPORT] src/app/app/api/seller/orders/route.ts:3 - server/lib import
+[SERVER_LIB_IMPORT] src/app/app/api/seller/orders/route.ts:4 - server/lib import
+[SERVER_LIB_IMPORT] src/app/app/api/seller/orders/[id]/events/route.ts:2 - server/lib import
+[SERVER_LIB_IMPORT] src/app/app/api/seller/orders/[id]/events/route.ts:3 - server/lib import
+[SERVER_LIB_IMPORT] src/app/app/api/seller/orders/[id]/payments/create/route.ts:2 - server/lib import
+[SERVER_LIB_IMPORT] src/app/app/api/seller/orders/[id]/payments/create/route.ts:3 - server/lib import
+[SERVER_LIB_IMPORT] src/app/app/api/seller/orders/[id]/payments/route.ts:2 - server/lib import
+[SERVER_LIB_IMPORT] src/app/app/api/seller/orders/[id]/payments/route.ts:3 - server/lib import
+[SERVER_LIB_IMPORT] src/app/app/api/seller/orders/[id]/route.ts:2 - server/lib import
+[SERVER_LIB_IMPORT] src/app/app/api/seller/orders/[id]/status/route.ts:2 - server/lib import
+[SERVER_LIB_IMPORT] src/app/app/api/seller/orders/[id]/status/route.ts:3 - server/lib import
+[SERVER_LIB_IMPORT] src/app/app/api/seller/orders/[id]/status/route.ts:4 - server/lib import
+[SERVER_LIB_IMPORT] src/app/app/api/seller/payments/[paymentAttemptId]/refund/route.ts:2 - server/lib import
+[SERVER_LIB_IMPORT] src/app/app/api/seller/payments/[paymentAttemptId]/refund/route.ts:3 - server/lib import
+[SERVER_LIB_IMPORT] src/app/app/api/seller/payments/[paymentAttemptId]/status/route.ts:2 - server/lib import
+[SERVER_LIB_IMPORT] src/app/app/api/seller/payments/[paymentAttemptId]/status/route.ts:3 - server/lib import
+[SERVER_LIB_IMPORT] src/app/app/api/test-cross-domain/route.ts:2 - server/lib import
+[SERVER_LIB_IMPORT] src/app/app/api/v1/orders/route.ts:2 - server/lib import
+[SERVER_LIB_IMPORT] src/app/app/api/v1/orders/[id]/route.ts:2 - server/lib import
+[SERVER_LIB_IMPORT] src/app/app/api/webhooks/stripe/route.ts:2 - server/lib import
+[SERVER_LIB_IMPORT] src/app/app/api/webhooks/whatsapp/route.ts:2 - server/lib import
+[SERVER_LIB_IMPORT] src/app/app/layout.tsx:5 - server/lib import
+[SERVER_LIB_IMPORT] src/app/layout.tsx:5 - server/lib import
+[CROSS_DOMAIN_IMPORT] src/app/api/seller/orders/route.ts:8 - Deep relative path
+[CROSS_DOMAIN_IMPORT] src/app/app/api/seller/orders/route.ts:8 - Deep relative path
+[CROSS_DOMAIN_IMPORT] src/app/app/api/test-cross-domain/route.ts:2 - Deep relative path
+[SCHEMA_DUPLICATION] src/app/app/test-schema.prisma:2 - Duplicate model: User
+[UNAUTHORIZED_SCHEMA] src/app/app/test-schema.prisma:1 - Schema file outside prisma/
+[DB_CONNECTION] src/server/db/prisma-client.ts:8 - DATABASE_URL
+[DB_CONNECTION] src/server/lib/env-validation.ts:27 - DATABASE_URL
+[DB_CONNECTION] src/server/lib/env-validation.ts:66 - DATABASE_URL
+[DB_CONNECTION] src/server/lib/env.ts:11 - DATABASE_URL
+[DB_CONNECTION] src/server/lib/env.ts:88 - DATABASE_URL
+[DB_CONNECTION] src/server/lib/production-hardening.ts:162 - DATABASE_URL
+[DB_CONNECTION] src/server/lib/production-hardening.ts:163 - DATABASE_URL
+[DB_CONNECTION] src/server/lib/production-hardening.ts:172 - DATABASE_URL
+[DB_CONNECTION] src/server/lib/production-hardening.ts:218 - DATABASE_URL
+[DB_CONNECTION] src/server/lib/production-hardening.ts:230 - DATABASE_URL
+[DB_CONNECTION] src/server/lib/production-hardening.ts:273 - DATABASE_URL
+[DB_CONNECTION] src/server/lib/production-hardening.ts:282 - DATABASE_URL
+[DB_CONNECTION] src/server/server/db/prisma-client.ts:8 - DATABASE_URL
+[DB_CONNECTION] src/server/server/lib/env-validation.ts:27 - DATABASE_URL
+[DB_CONNECTION] src/server/server/lib/env-validation.ts:66 - DATABASE_URL
+[DB_CONNECTION] src/server/server/lib/env.ts:11 - DATABASE_URL
+[DB_CONNECTION] src/server/server/lib/env.ts:88 - DATABASE_URL
+[DB_CONNECTION] src/tests/production-env-validation.test.ts:47 - DATABASE_URL
+[DB_CONNECTION] src/tests/production-env-validation.test.ts:70 - DATABASE_URL
+[DB_CONNECTION] src/tests/production-hardening.test.ts:32 - DATABASE_URL
+[DB_CONNECTION] src/tests/production-hardening.test.ts:47 - DATABASE_URL
+[DB_CONNECTION] src/tests/production-hardening.test.ts:61 - DATABASE_URL
+[DB_CONNECTION] src/tests/production-hardening.test.ts:75 - DATABASE_URL
+[DB_CONNECTION] src/tests/production-hardening.test.ts:90 - DATABASE_URL
+[DB_CONNECTION] src/tests/production-hardening.test.ts:103 - DATABASE_URL
+[DB_CONNECTION] src/tests/production-hardening.test.ts:172 - DATABASE_URL
+[DB_CONNECTION] src/tests/production-hardening.test.ts:184 - DATABASE_URL
+[DB_CONNECTION] src/tests/production-hardening.test.ts:198 - DATABASE_URL
+[DB_CONNECTION] src/tests/production-hardening.test.ts:230 - DATABASE_URL
+[DB_CONNECTION] src/tests/production-hardening.test.ts:244 - DATABASE_URL
+[DB_CONNECTION] src/tests/production-hardening.test.ts:260 - DATABASE_URL
+[DB_CONNECTION] src/tests/production-hardening.test.ts:276 - DATABASE_URL
+[DB_CONNECTION] src/tests/production-hardening.test.ts:299 - DATABASE_URL
+[DB_CONNECTION] src/tests/setup.ts:50 - DATABASE_URL
+[DB_CONNECTION] src/tests/setup.ts:51 - DATABASE_URL
+[DB_CONNECTION] src/tests/setup.ts:57 - DATABASE_URL
+[HARDCODED_SECRET] src/tests/auth-hardening.test.ts:318 - password.*=.*['"][^'"]{8,}['"]
+[HARDCODED_SECRET] src/tests/auth-hardening.test.ts:327 - password.*=.*['"][^'"]{8,}['"]
+[HARDCODED_SECRET] src/tests/integration/basic.test.ts:12 - password.*=.*['"][^'"]{8,}['"]
+[DIRECT_ENV_ACCESS] src/app/api/cron/reconcile-payments/route.ts:16 - process\.env\.
+[DIRECT_ENV_ACCESS] src/app/api/cron/reconcile-payments/route.ts:30 - process\.env\.
+[DIRECT_ENV_ACCESS] src/app/api/cron/reconcile-payments/route.ts:43 - process\.env\.
+[DIRECT_ENV_ACCESS] src/app/api/health/monitoring/route.ts:78 - process\.env\.
+[DIRECT_ENV_ACCESS] src/app/api/health/monitoring/route.ts:103 - process\.env\.
+[DIRECT_ENV_ACCESS] src/app/app/api/cron/reconcile-payments/route.ts:16 - process\.env\.
+[DIRECT_ENV_ACCESS] src/app/app/api/cron/reconcile-payments/route.ts:30 - process\.env\.
+[DIRECT_ENV_ACCESS] src/app/app/api/cron/reconcile-payments/route.ts:43 - process\.env\.
+[DIRECT_ENV_ACCESS] src/app/app/api/health/monitoring/route.ts:78 - process\.env\.
+[DIRECT_ENV_ACCESS] src/app/app/api/health/monitoring/route.ts:103 - process\.env\.

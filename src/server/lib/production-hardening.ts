@@ -8,6 +8,7 @@
  * - Authentication requirements
  */
 
+import { PrismaClient } from '@prisma/client';
 import { createClient } from 'redis';
 
 export interface ProductionHealthCheck {
@@ -276,7 +277,6 @@ class ProductionHardening {
         }
 
         // Check if audit_events table exists and is accessible
-        const { PrismaClient } = await import('@prisma/client');
         const prisma = new PrismaClient({
           datasources: {
             db: {
@@ -313,7 +313,7 @@ class ProductionHardening {
    * Cleanup resources
    */
   async cleanup(): Promise<void> {
-    if (this.redisClient) {
+    if (this.redisClient && this.redisClient.isOpen) {
       await this.redisClient.quit();
       this.redisClient = null;
     }
