@@ -256,3 +256,60 @@ model verification {
   createdAt  DateTime @default(now()) @db.Timestamptz(6)
   updatedAt  DateTime @default(now()) @db.Timestamptz(6)
 }
+
+// Runtime Authority Tables
+model AuditEvent {
+  id          String   @id @default(cuid())
+  actorId     String?  @map("actor_id")
+  eventType   String   @map("event_type")
+  payloadJson String   @map("payload_json")
+  createdAt   DateTime @default(now()) @map("created_at")
+
+  @@index([actorId, createdAt])
+  @@index([eventType])
+  @@index([createdAt])
+  @@map("audit_events")
+}
+
+model RateLimit {
+  id             String   @id @default(cuid())
+  key            String
+  limitCount     Int      @map("limit_count")
+  windowSeconds  Int      @map("window_seconds")
+  currentCount   Int      @default(0) @map("current_count")
+  windowStart    DateTime @default(now()) @map("window_start")
+
+  @@unique([key])
+  @@index([key])
+  @@map("rate_limits")
+}
+
+model Inventory {
+  id                 String   @id @default(cuid())
+  sellerId           String   @map("seller_id")
+  productId          String   @map("product_id")
+  quantityAvailable  Int      @default(0) @map("quantity_available")
+  reservedQuantity   Int      @default(0) @map("reserved_quantity")
+  createdAt          DateTime @default(now()) @map("created_at")
+  updatedAt          DateTime @updatedAt @map("updated_at")
+
+  @@unique([sellerId, productId])
+  @@index([sellerId])
+  @@index([productId])
+  @@map("inventory")
+}
+
+model InventoryReservation {
+  id          String   @id @default(cuid())
+  inventoryId String   @map("inventory_id")
+  orderId     String   @map("order_id")
+  quantity    Int
+  status      String   @default("ACTIVE")
+  expiresAt   DateTime @map("expires_at")
+  createdAt   DateTime @default(now()) @map("created_at")
+
+  @@index([inventoryId])
+  @@index([orderId])
+  @@index([status, expiresAt])
+  @@map("inventory_reservations")
+}

@@ -115,6 +115,19 @@ export class PaymentService {
         },
       })
 
+      // Log to centralized audit trail
+      try {
+        const { auditTrail } = await import('../lib/audit-trail')
+        await auditTrail.logPaymentAttempt(paymentAttempt.id, data.orderId, actorUserId || 'system', {
+          provider: data.provider,
+          amountMinor: data.amountMinor,
+          currency: data.currency,
+          status: 'PENDING'
+        })
+      } catch (auditError) {
+        console.warn('Audit logging failed for payment attempt:', auditError)
+      }
+
       return paymentAttempt
     })
   }

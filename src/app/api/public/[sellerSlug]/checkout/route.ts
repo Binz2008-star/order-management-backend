@@ -110,6 +110,21 @@ export async function POST(
       return newOrder;
     });
 
+    // Log audit event for order creation
+    try {
+      const { auditTrail } = await import('@/server/lib/audit-trail');
+      await auditTrail.logOrderCreated(order.id, 'public_api', {
+        sellerId: seller.id,
+        customerId: customer.id,
+        totalMinor: order.totalMinor,
+        itemCount: validatedItems.length,
+        source: 'public_api'
+      });
+    } catch (auditError) {
+      console.warn('Audit logging failed:', auditError);
+      // Continue without failing the order creation
+    }
+
     // Fetch the complete order with items
     const orderWithItems = await prisma.order.findUnique({
       where: { id: order.id },

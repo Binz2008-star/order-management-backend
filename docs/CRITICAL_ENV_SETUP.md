@@ -1,7 +1,9 @@
 # 🚨 CRITICAL: Environment Variables Setup Guide
+
 # ===========================================
 
 ## 📍 Current Status
+
 - ✅ Backend deployed successfully
 - ❌ Environment variables missing in Vercel
 - ❌ System returning 503 Service Unavailable
@@ -18,33 +20,49 @@ NEXTAUTH_URL=https://order-management-backend-one.vercel.app
 ADMIN_SEED_TOKEN=MTc3NTE5NDM1MzE0ODo5M2ViMGY1N2M4N2Y2OWUyODAwZTI0NWIzZjM4MTAyZGExNjZjZjE0MjM2YmQyNTQwNDYxMDBiNjlmNDgwNWEw
 ```
 
+### **Platform Integration Variables (New):**
+
+```bash
+PLATFORM_API_URL=http://localhost:3001
+PLATFORM_API_KEY=dev-key
+```
+
+**Note:** For production, replace `PLATFORM_API_URL` with your actual platform API endpoint and generate a secure `PLATFORM_API_KEY`.
+
 ## 📋 STEP-BY-STEP SETUP
 
 ### **1. Go to Vercel Environment Variables**
+
 - URL: https://vercel.com/robens-projects/order-management-backend/settings/environment-variables
 - Click "Add Variable"
 
 ### **2. Add Each Variable**
+
 For each variable above:
+
 - **Name**: Copy exactly (e.g., `JWT_SECRET`)
 - **Value**: Copy exactly the generated secret
 - **Environments**: Select Production, Preview, Development
 - Click "Save"
 
 ### **3. Variables to Add:**
+
 1. `JWT_SECRET` - Critical for authentication
 2. `NEXTAUTH_SECRET` - Critical for NextAuth
 3. `NEXTAUTH_URL` - Critical for auth callbacks
 4. `ADMIN_SEED_TOKEN` - Critical for database seeding
 
 ### **4. Redeploy Application**
+
 - Go to: https://vercel.com/robens-projects/order-management-backend/deployments
 - Click the latest deployment
 - Click "Redeploy"
 - Wait for deployment to complete (2-3 minutes)
 
 ### **5. Verify System is Working**
+
 Run this command in your terminal:
+
 ```bash
 set PROD_URL=https://order-management-backend-one.vercel.app && npm run verify:prod
 ```
@@ -52,6 +70,7 @@ set PROD_URL=https://order-management-backend-one.vercel.app && npm run verify:p
 ## ✅ EXPECTED RESULTS
 
 ### **Before Fix (Current):**
+
 ```
 ❌ HTTP POST /api/auth/login (1267ms)
    503 Service Unavailable
@@ -59,6 +78,7 @@ set PROD_URL=https://order-management-backend-one.vercel.app && npm run verify:p
 ```
 
 ### **After Fix (Expected):**
+
 ```
 ✅ HTTP POST /api/auth/login (200ms)
    200 OK
@@ -76,6 +96,7 @@ set PROD_URL=https://order-management-backend-one.vercel.app && npm run verify:p
 ## 🎯 SUCCESS CRITERIA
 
 The system is production-ready when:
+
 - ✅ Health check returns 200 OK
 - ✅ Authentication endpoints respond properly
 - ✅ Database seeding works
@@ -95,6 +116,7 @@ The system is production-ready when:
 ## 📞 NEXT STEPS
 
 After environment variables are fixed:
+
 1. ✅ System becomes fully functional
 2. ✅ All API endpoints work
 3. ✅ Authentication system operational
