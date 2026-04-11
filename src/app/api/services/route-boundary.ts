@@ -1,13 +1,13 @@
 /**
  * Route Boundary Layer
- * 
+ *
  * This file provides boundary functions for API routes
  * without exposing server internals.
  */
 
-export interface RouteResponse {
+export interface RouteResponse<T = unknown> {
   success: boolean;
-  data?: any;
+  data?: T;
   error?: string;
   status?: number;
 }
@@ -19,13 +19,13 @@ export interface RouteHandler {
 /**
  * Create a standardized route response
  */
-export function createRouteResponse(
+export function createRouteResponse<T = unknown>(
   success: boolean,
-  data?: any,
+  data?: T,
   error?: string,
   status?: number
 ): Response {
-  const body: RouteResponse = {
+  const body: RouteResponse<T> = {
     success,
     data,
     error,
@@ -66,14 +66,14 @@ export function createRouteHandler(
  */
 export async function validateJsonBody<T>(
   request: Request,
-  schema?: { parse: (data: any) => T }
+  schema?: { parse: (data: unknown) => T }
 ): Promise<T> {
   const body = await request.json();
-  
+
   if (schema) {
     return schema.parse(body);
   }
-  
+
   return body as T;
 }
 
@@ -90,8 +90,8 @@ export function createErrorResponse(
 /**
  * Create success response
  */
-export function createSuccessResponse(
-  data?: any,
+export function createSuccessResponse<T = unknown>(
+  data?: T,
   status: number = 200
 ): Response {
   return createRouteResponse(true, data, undefined, status);
