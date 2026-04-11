@@ -9,23 +9,26 @@
  * - Authentication requirements
  */
 
-import { afterEach, beforeEach, describe, expect, it } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { productionHardening, productionStartup } from '../server/lib/production-hardening';
 import { RateLimitUtils } from '../server/lib/rate-limiter';
 
 const mutableEnv = process.env as Record<string, string | undefined>;
+const originalEnv = { ...process.env };
+
+// Global mock: prevent process.exit from killing the test runner
+beforeEach(() => {
+  vi.spyOn(process, 'exit').mockImplementation(() => undefined as never);
+});
+
+afterEach(() => {
+  process.env = { ...originalEnv };
+  vi.restoreAllMocks();
+});
 
 describe('Production Hardening', () => {
-  const originalEnv = process.env;
-
   beforeEach(() => {
-    // Mock production environment
     process.env = { ...originalEnv, NODE_ENV: 'test' };
-  });
-
-  afterEach(() => {
-    // Cleanup
-    process.env = originalEnv;
   });
 
   describe('Environment Validation', () => {
