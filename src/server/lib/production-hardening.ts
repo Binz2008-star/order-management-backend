@@ -140,21 +140,36 @@ class ProductionHardening {
     this.healthChecks.push({
       name: 'redis-connectivity',
       check: async () => {
-        if (!process.env.REDIS_URL) {
-          throw new Error('REDIS_URL not configured');
+        const redisUrl = process.env.REDIS_URL;
+        const upstashUrl = process.env.UPSTASH_REDIS_REST_URL;
+        const upstashToken = process.env.UPSTASH_REDIS_REST_TOKEN;
+
+        if (!redisUrl && (!upstashUrl || !upstashToken)) {
+          throw new Error('Redis not configured - need REDIS_URL or UPSTASH_REDIS_REST_URL + UPSTASH_REDIS_REST_TOKEN');
         }
 
         try {
-          this.redisClient = createClient({
-            url: process.env.REDIS_URL!,
-            socket: {
-              connectTimeout: 5000
-            }
-          });
+          if (redisUrl) {
+            // Test standard Redis connection
+            this.redisClient = createClient({
+              url: redisUrl,
+              socket: {
+                connectTimeout: 5000
+              }
+            });
 
-          await this.redisClient.connect();
-          await this.redisClient.ping();
-          return true;
+            await this.redisClient.connect();
+            await this.redisClient.ping();
+            return true;
+          } else {
+            // Test Upstash Redis connection
+            const { UpstashHttpClient } = await import('./http-client');
+            const httpClient = new UpstashHttpClient(upstashUrl!.replace(/\/$/, ''), upstashToken!);
+
+            // Test with a simple ping/command
+            await httpClient.ping();
+            return true;
+          }
         } catch (error) {
           throw new Error(`Redis connection failed: ${error instanceof Error ? error.message : 'Unknown error'}`);
         }

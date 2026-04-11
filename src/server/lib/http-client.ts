@@ -226,6 +226,24 @@ export class UpstashHttpClient {
   }
 
   /**
+   * Ping the Redis server to check connectivity
+   */
+  async ping(): Promise<string> {
+    const response = await HttpClient.post<string>(
+      `${this.baseUrl}/ping`,
+      null,
+      {
+        headers: {
+          Authorization: `Bearer ${this.token}`,
+          'Content-Type': 'application/json',
+        },
+      }
+    );
+
+    return response.data || 'PONG';
+  }
+
+  /**
    * Execute SET command with options
    */
   async set(key: string, value: string, options?: {
