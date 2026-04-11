@@ -39,13 +39,20 @@ export interface RateLimitResult {
 }
 
 export class RateLimiter {
-  private redis = productionHardening.getRedisClient();
+  private _redis: ReturnType<typeof productionHardening.getRedisClient> | null = null;
   private config: RateLimitConfig;
   private keyPrefix: string;
 
   constructor(config: RateLimitConfig, keyPrefix: string = 'rate_limit') {
     this.config = config;
     this.keyPrefix = keyPrefix;
+  }
+
+  private get redis() {
+    if (!this._redis) {
+      this._redis = productionHardening.getRedisClient();
+    }
+    return this._redis;
   }
 
   /**
