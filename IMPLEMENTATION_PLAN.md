@@ -7,11 +7,13 @@ The order-management-backend has been refactored to enforce strict domain bounda
 ## **Violations Fixed**
 
 ### **1. Platform Boundary Violations**
+
 - **Products API**: Removed `/api/public/[sellerSlug]/products` endpoint from runtime
 - **Product Validation**: Moved to platform integration layer
 - **Catalog Queries**: Eliminated platform domain logic from runtime
 
 ### **2. Missing Runtime Authority Components**
+
 - **Platform Integration Layer**: Added `platform-integration.ts` for clean separation
 - **Order Validation Service**: Created `order-validation.ts` with platform integration
 - **Proper Error Handling**: Implemented domain-specific validation errors
@@ -19,16 +21,19 @@ The order-management-backend has been refactored to enforce strict domain bounda
 ## **Implementation Changes**
 
 ### **Files Created**
+
 1. `src/server/lib/platform-integration.ts` - Platform service interface and client
 2. `src/server/lib/order-validation.ts` - Runtime order validation with platform integration
 
 ### **Files Modified**
+
 1. `src/app/api/public/[sellerSlug]/products/route.ts` - Removed catalog queries, returns boundary error
 2. `src/app/api/public/[sellerSlug]/checkout/route.ts` - Uses platform validation instead of local logic
 
 ## **Next Steps Required**
 
 ### **Phase 1: Platform API Implementation**
+
 ```typescript
 // TODO: Implement actual platform API calls in platform-integration.ts
 async validateProducts(productIds: string[]): Promise<Map<string, PlatformProduct>> {
@@ -48,6 +53,7 @@ async getProductPricing(productId: string): Promise<number> {
 ```
 
 ### **Phase 2: Environment Configuration**
+
 ```bash
 # Add to production environment
 PLATFORM_API_URL=https://platform-api.example.com
@@ -55,7 +61,9 @@ PLATFORM_API_KEY=your-platform-api-key
 ```
 
 ### **Phase 3: Missing Runtime Tables**
+
 Add to Prisma schema:
+
 ```sql
 -- Runtime authority tables
 CREATE TABLE audit_events (
@@ -95,35 +103,39 @@ CREATE TABLE inventory_reservations (
 ```
 
 ### **Phase 4: Audit Trail Implementation**
+
 ```typescript
 // Add to order creation flow
-await createAuditEvent(tx, order.id, 'ORDER_CREATED', {
+await createAuditEvent(tx, order.id, "ORDER_CREATED", {
   sellerId: order.sellerId,
   customerId: order.customerId,
-  totalMinor: order.totalMinor
+  totalMinor: order.totalMinor,
 });
 
 // Add to payment processing
-await createAuditEvent(tx, payment.id, 'PAYMENT_ATTEMPTED', {
+await createAuditEvent(tx, payment.id, "PAYMENT_ATTEMPTED", {
   orderId: payment.orderId,
   amountMinor: payment.amountMinor,
-  provider: payment.provider
+  provider: payment.provider,
 });
 ```
 
 ## **Testing Strategy**
 
 ### **Unit Tests**
+
 - Platform integration layer (mock platform API)
 - Order validation service with boundary conditions
 - Error handling for platform failures
 
 ### **Integration Tests**
+
 - End-to-end checkout flow with platform integration
 - Boundary violation enforcement
 - Runtime authority verification
 
 ### **Contract Tests**
+
 - Platform API contract validation
 - Runtime API boundary enforcement
 - Error response format consistency
@@ -131,12 +143,14 @@ await createAuditEvent(tx, payment.id, 'PAYMENT_ATTEMPTED', {
 ## **Deployment Checklist**
 
 ### **Pre-deployment**
+
 - [ ] Platform API endpoints available and documented
 - [ ] Environment variables configured
 - [ ] Database schema updated with audit/rate limit tables
 - [ ] Integration tests passing with platform API
 
 ### **Post-deployment**
+
 - [ ] Monitor platform API latency and failures
 - [ ] Verify audit trail completeness
 - [ ] Test rate limiting effectiveness
@@ -145,6 +159,7 @@ await createAuditEvent(tx, payment.id, 'PAYMENT_ATTEMPTED', {
 ## **Rollback Plan**
 
 If platform integration fails:
+
 1. Disable platform validation in checkout route
 2. Revert to product snapshot validation only
 3. Add monitoring for platform API availability
