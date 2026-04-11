@@ -45,9 +45,7 @@ jobs:
         run: npx prisma generate
 
       - name: Run migrations on test database
-        run: |
-          echo "DATABASE_URL=postgresql://postgres:postgres@localhost:5432/order_management_test?schema=public" >> .env
-          npx prisma migrate deploy
+        run: npx prisma migrate deploy
 
       - name: Type Check
         run: npm run typecheck

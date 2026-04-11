@@ -220,19 +220,13 @@ class ProductionHardening {
     this.healthChecks.push({
       name: 'environment-validation',
       check: async () => {
-        const required = [
-          'NODE_ENV',
-          'DATABASE_URL',
-          'JWT_SECRET',
-          'REDIS_URL'
-        ];
-
-        const missing = required.filter(key => !process.env[key]);
-        if (missing.length > 0) {
-          throw new Error(`Missing required environment variables: ${missing.join(', ')}`);
+        // Environment validation is handled by env-validation.ts module
+        // All required variables are already validated on import
+        if (!process.env.DATABASE_URL || !process.env.JWT_SECRET || !process.env.REDIS_URL) {
+          throw new Error('Required environment variables not properly configured');
         }
 
-        // Production-specific validations
+        // Additional production validations (redundant with env-validation.ts but kept for clarity)
         if (process.env.NODE_ENV === 'production') {
           if (process.env.DATABASE_URL?.includes('localhost') || process.env.DATABASE_URL?.includes('127.0.0.1')) {
             throw new Error('Production cannot use localhost database');
@@ -330,39 +324,27 @@ class ProductionHardening {
 export const productionHardening = new ProductionHardening();
 
 /**
- * Production startup middleware
- * This is the only place that calls process.exit
+ * Run production hardening validation
+ * Returns status for orchestration layer to handle
  */
-export async function productionStartup(): Promise<void> {
-  if (process.env.NODE_ENV === 'production') {
-    const status = await productionHardening.initialize();
+export async function runProductionHardening(): Promise<HardeningStatus> {
+  return await productionHardening.initialize();
+}
 
-    if (!status.healthy) {
-      console.error('Production startup failed - system not healthy');
-      console.error('Failed critical checks:',
-        status.checks
-          .filter(c => c.status === 'fail')
-          .map(c => c.name)
-          .join(', ')
-      );
-      process.exit(1);
-    }
+/**
+ * Setup graceful shutdown handlers
+ * Call this after successful startup
+ */
+export function setupGracefulShutdown(): void {
+  process.on('SIGTERM', async () => {
+    console.log('SIGTERM received - shutting down gracefully');
+    await productionHardening.cleanup();
+    process.exit(0);
+  });
 
-    // Setup graceful shutdown
-    process.on('SIGTERM', async () => {
-      console.log('SIGTERM received - shutting down gracefully');
-      await productionHardening.cleanup();
-      process.exit(0);
-    });
-
-    process.on('SIGINT', async () => {
-      console.log('SIGINT received - shutting down gracefully');
-      await productionHardening.cleanup();
-      process.exit(0);
-    });
-
-    console.log('Production startup completed successfully');
-  } else {
-    console.log('Development mode - skipping production hardening');
-  }
+  process.on('SIGINT', async () => {
+    console.log('SIGINT received - shutting down gracefully');
+    await productionHardening.cleanup();
+    process.exit(0);
+  });
 }

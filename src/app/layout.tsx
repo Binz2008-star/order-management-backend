@@ -1,9 +1,8 @@
 import type { Metadata } from "next";
-import { Analytics } from "@vercel/analytics/next";
 import "./globals.css";
 
-// Validate production environment on startup
-import "../server/lib/env-validation";
+// Initialize application startup
+import "../server/lib/startup";
 
 export const metadata: Metadata = {
   title: "Order Management Backend",
@@ -28,7 +27,7 @@ export default function RootLayout({
     >
       <body className="min-h-full flex flex-col">
         {children}
-        <Analytics />
+        {/* Analytics component removed - @vercel/analytics/next not available */}
       </body>
     </html>
   );
