@@ -9,7 +9,6 @@
  */
 
 import { createClient } from 'redis';
-import { env } from './env';
 
 export interface ProductionHealthCheck {
   name: string;
@@ -140,13 +139,13 @@ class ProductionHardening {
     this.healthChecks.push({
       name: 'redis-connectivity',
       check: async () => {
-        if (!env.REDIS_URL) {
+        if (!process.env.REDIS_URL) {
           throw new Error('REDIS_URL not configured');
         }
 
         try {
           this.redisClient = createClient({
-            url: env.REDIS_URL!,
+            url: process.env.REDIS_URL!,
             socket: {
               connectTimeout: 5000
             }
@@ -167,7 +166,7 @@ class ProductionHardening {
     this.healthChecks.push({
       name: 'database-connectivity',
       check: async () => {
-        if (!env.DATABASE_URL) {
+        if (!process.env.DATABASE_URL) {
           throw new Error('DATABASE_URL not configured');
         }
 
@@ -177,7 +176,7 @@ class ProductionHardening {
           const prisma = new PrismaClient({
             datasources: {
               db: {
-                url: env.DATABASE_URL
+                url: process.env.DATABASE_URL
               }
             }
           });
@@ -197,19 +196,19 @@ class ProductionHardening {
     this.healthChecks.push({
       name: 'jwt-secret-validation',
       check: async () => {
-        if (!env.JWT_SECRET) {
+        if (!process.env.JWT_SECRET) {
           throw new Error('JWT_SECRET not configured');
         }
 
-        if (env.JWT_SECRET.length < 32) {
+        if (process.env.JWT_SECRET.length < 32) {
           throw new Error('JWT_SECRET must be at least 32 characters');
         }
 
         // Test JWT signing/verification
         const jwt = await import('jsonwebtoken');
         const testPayload = { test: true };
-        const token = jwt.sign(testPayload, env.JWT_SECRET, { expiresIn: '1h' });
-        const decoded = jwt.verify(token, env.JWT_SECRET);
+        const token = jwt.sign(testPayload, process.env.JWT_SECRET, { expiresIn: '1h' });
+        const decoded = jwt.verify(token, process.env.JWT_SECRET);
 
         return decoded !== null;
       },
@@ -234,16 +233,16 @@ class ProductionHardening {
         }
 
         // Production-specific validations
-        if (env.NODE_ENV === 'production') {
-          if (env.DATABASE_URL.includes('localhost') || env.DATABASE_URL.includes('127.0.0.1')) {
+        if (process.env.NODE_ENV === 'production') {
+          if (process.env.DATABASE_URL?.includes('localhost') || process.env.DATABASE_URL?.includes('127.0.0.1')) {
             throw new Error('Production cannot use localhost database');
           }
 
-          if (env.REDIS_URL.includes('localhost') || env.REDIS_URL.includes('127.0.0.1')) {
+          if (process.env.REDIS_URL?.includes('localhost') || process.env.REDIS_URL?.includes('127.0.0.1')) {
             throw new Error('Production cannot use localhost Redis');
           }
 
-          if (env.JWT_SECRET === 'dev-secret' || env.JWT_SECRET === 'test-secret') {
+          if (process.env.JWT_SECRET === 'dev-secret' || process.env.JWT_SECRET === 'test-secret') {
             throw new Error('Production cannot use default JWT secret');
           }
         }
@@ -278,7 +277,7 @@ class ProductionHardening {
     this.healthChecks.push({
       name: 'audit-trail-configuration',
       check: async () => {
-        if (!env.DATABASE_URL) {
+        if (!process.env.DATABASE_URL) {
           throw new Error('Database not available for audit trail');
         }
 
@@ -287,7 +286,7 @@ class ProductionHardening {
         const prisma = new PrismaClient({
           datasources: {
             db: {
-              url: env.DATABASE_URL
+              url: process.env.DATABASE_URL
             }
           }
         });
@@ -335,7 +334,7 @@ export const productionHardening = new ProductionHardening();
  * This is the only place that calls process.exit
  */
 export async function productionStartup(): Promise<void> {
-  if (env.NODE_ENV === 'production') {
+  if (process.env.NODE_ENV === 'production') {
     const status = await productionHardening.initialize();
 
     if (!status.healthy) {
