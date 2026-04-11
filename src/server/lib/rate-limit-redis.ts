@@ -1,5 +1,6 @@
 // Rate limiting store - no database transactions needed (Redis operations are atomic)
 import { NextRequest } from 'next/server'
+import { UpstashHttpClient } from './http-client'
 import { logger } from './logger'
 
 export type RateLimitFailurePolicy = 'fail-closed' | 'degrade-memory'
@@ -46,10 +47,6 @@ interface RedisClient {
   }
 }
 
-interface UpstashResponse<T> {
-  result?: T
-  error?: string
-}
 
 export type RateLimitResponse =
   | {
@@ -126,61 +123,38 @@ function buildHeaders(result: RateLimitCheckResult, maxRequests: number, include
 }
 
 class UpstashRestClient implements RedisClient {
+  private httpClient: UpstashHttpClient
+
   constructor(
     private readonly baseUrl: string,
     private readonly token: string
-  ) { }
-
-  private async request<T>(command: string[], method: 'GET' | 'POST' = 'POST'): Promise<T> {
-    const encodedCommand = command.map((part) => encodeURIComponent(part)).join('/')
-    const url = `${this.baseUrl}/${encodedCommand}`
-
-    const response = await fetch(url, {
-      method,
-      headers: {
-        Authorization: `Bearer ${this.token}`,
-      },
-    })
-
-    if (!response.ok) {
-      throw new Error(`Upstash request failed with status ${response.status}`)
-    }
-
-    const payload = await response.json() as UpstashResponse<T>
-
-    if (payload.error) {
-      throw new Error(payload.error)
-    }
-
-    if (typeof payload.result === 'undefined') {
-      throw new Error('Upstash response did not include a result')
-    }
-
-    return payload.result
+  ) {
+    this.httpClient = new UpstashHttpClient(baseUrl, token)
   }
 
   async get(key: string): Promise<string | null> {
-    return this.request<string | null>(['get', key], 'GET')
+    return this.httpClient.get(key)
   }
 
   async set(key: string, value: string, mode?: 'EX' | 'PX' | 'NX' | 'XX', duration?: number): Promise<string | null> {
-    const command = ['set', key, value]
-    if (mode) command.push(mode)
-    if (typeof duration === 'number') command.push(duration.toString())
-    return this.request<string | null>(command)
+    const options: { NX?: boolean; EX?: number; PX?: number } = {}
+    if (mode === 'NX') options.NX = true
+    if (mode === 'EX' && duration) options.EX = duration
+    if (mode === 'PX' && duration) options.PX = duration
+
+    return this.httpClient.set(key, value, Object.keys(options).length > 0 ? options : undefined)
   }
 
   async incr(key: string): Promise<number> {
-    return this.request<number>(['incr', key])
+    return this.httpClient.incr(key)
   }
 
   async expire(key: string, seconds: number): Promise<boolean> {
-    const result = await this.request<number>(['expire', key, seconds.toString()])
-    return result === 1
+    return this.httpClient.expire(key, seconds)
   }
 
   async del(key: string): Promise<number> {
-    return this.request<number>(['del', key])
+    return this.httpClient.del(key)
   }
 
   multi() {
@@ -194,36 +168,11 @@ class UpstashRestClient implements RedisClient {
         commands.push(['expire', key, seconds.toString()])
       },
       exec: async (): Promise<[number, boolean] | null> => {
-        const response = await fetch(`${this.baseUrl}/pipeline`, {
-          method: 'POST',
-          headers: {
-            Authorization: `Bearer ${this.token}`,
-            'Content-Type': 'application/json',
-          },
-          body: JSON.stringify(commands),
-        })
+        const results = await this.httpClient.executePipeline<number>(commands)
 
-        if (!response.ok) {
-          throw new Error(`Upstash pipeline failed with status ${response.status}`)
-        }
-
-        const payload = await response.json() as Array<UpstashResponse<number>>
-
-        if (!Array.isArray(payload) || payload.length !== commands.length) {
+        if (!Array.isArray(results) || results.length !== commands.length) {
           throw new Error('Unexpected Upstash pipeline response')
         }
-
-        const results = payload.map((entry) => {
-          if (entry.error) {
-            throw new Error(entry.error)
-          }
-
-          if (typeof entry.result === 'undefined') {
-            throw new Error('Upstash pipeline entry missing result')
-          }
-
-          return entry.result
-        })
 
         return [results[0], results[1] === 1]
       }

@@ -1,69 +1,10 @@
 // Rate limiting store - no database transactions needed (Upstash operations are atomic)
+import { UpstashHttpClient } from './http-client'
 import { logger } from './logger'
 import { RateLimitResult, RateLimitStore } from './rate-limit-store'
 
-interface UpstashResponse<T> {
-  result?: T
-  error?: string
-}
-
-class UpstashRestClient {
-  constructor(
-    private readonly baseUrl: string,
-    private readonly token: string
-  ) { }
-
-  private async request<T>(command: string[], method: 'GET' | 'POST' = 'POST'): Promise<T> {
-    const encodedCommand = command.map((part) => encodeURIComponent(part)).join('/')
-    const url = `${this.baseUrl}/${encodedCommand}`
-
-    const response = await fetch(url, {
-      method,
-      headers: {
-        Authorization: `Bearer ${this.token}`,
-      },
-    })
-
-    if (!response.ok) {
-      throw new Error(`Upstash request failed with status ${response.status}`)
-    }
-
-    const data: UpstashResponse<T> = await response.json()
-
-    if (data.error) {
-      throw new Error(`Upstash error: ${data.error}`)
-    }
-
-    return data.result as T
-  }
-
-  async get(key: string): Promise<string | null> {
-    return this.request<string>(['GET', key])
-  }
-
-  async set(key: string, value: string, mode?: 'EX' | 'PX', duration?: number): Promise<string | null> {
-    const command = ['SET', key, value]
-    if (mode && duration) {
-      command.push(mode, duration.toString())
-    }
-    return this.request<string>(command)
-  }
-
-  async incr(key: string): Promise<number> {
-    return this.request<number>(['INCR', key])
-  }
-
-  async expire(key: string, seconds: number): Promise<boolean> {
-    return this.request<boolean>(['EXPIRE', key, seconds.toString()])
-  }
-
-  async del(key: string): Promise<number> {
-    return this.request<number>(['DEL', key])
-  }
-}
-
 export class UpstashRateLimitStore implements RateLimitStore {
-  private client: UpstashRestClient | null = null
+  private client: UpstashHttpClient | null = null
   private isAvailable = false
 
   constructor(
@@ -78,7 +19,7 @@ export class UpstashRateLimitStore implements RateLimitStore {
 
   private async initialize(): Promise<void> {
     try {
-      this.client = new UpstashRestClient(this.config.baseUrl, this.config.token)
+      this.client = new UpstashHttpClient(this.config.baseUrl, this.config.token)
 
       // Test connectivity
       await this.client.get('test-connection')
@@ -119,43 +60,22 @@ export class UpstashRateLimitStore implements RateLimitStore {
       let currentCount: number
 
       // First try to set with expiry (only if not exists) - atomic
-      const setResponse = await fetch(`${this.config.baseUrl}/SET`, {
-        method: 'POST',
-        headers: {
-          'Authorization': `Bearer ${this.config.token}`,
-          'Content-Type': 'application/json'
-        },
-        body: JSON.stringify({
-          key: redisKey,
-          value: '1',
-          options: {
-            NX: true,
-            EX: windowSeconds
-          }
-        })
-      })
-
-      if (setResponse.ok) {
-        // Key was newly created with expiry - atomic operation complete
-        currentCount = 1
-      } else {
-        // Key already exists, increment it - separate operation (race window here)
-        const incrResponse = await fetch(`${this.config.baseUrl}/INCR`, {
-          method: 'POST',
-          headers: {
-            'Authorization': `Bearer ${this.config.token}`,
-            'Content-Type': 'application/json'
-          },
-          body: JSON.stringify({
-            key: redisKey
-          })
+      try {
+        const setResult = await this.client!.set(redisKey, '1', {
+          NX: true,
+          EX: windowSeconds
         })
 
-        if (!incrResponse.ok) {
-          throw new Error(`Upstash INCR failed with status ${incrResponse.status}`)
+        if (setResult !== null) {
+          // Key was newly created with expiry - atomic operation complete
+          currentCount = 1
+        } else {
+          // Key already exists, increment it - separate operation (race window here)
+          currentCount = await this.client!.incr(redisKey)
         }
-
-        currentCount = await incrResponse.json() as number
+      } catch (_error) {
+        // If SET fails, fall back to INCR
+        currentCount = await this.client!.incr(redisKey)
       }
 
       const allowed = currentCount <= limit
