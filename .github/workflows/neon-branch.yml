@@ -1,4 +1,4 @@
-name: Create/Delete Branch for Pull Request
+name: Create/Delete Branch for Pull Request (DISABLED)
 
 on:
   pull_request:
@@ -17,6 +17,7 @@ jobs:
     outputs:
       branch: ${{ steps.branch_name.outputs.current_branch }}
     runs-on: ubuntu-latest
+    if: false
     steps:
       - name: Get branch name
         id: branch_name
@@ -28,13 +29,7 @@ jobs:
       db_url: ${{ steps.create_neon_branch_encode.outputs.db_url }}
       db_url_with_pooler: ${{ steps.create_neon_branch_encode.outputs.db_url_with_pooler }}
     needs: setup
-    # TEMPORARILY DISABLED TO UNBLOCK PR #3 MERGE
-    if: |
-      false && (
-      github.event_name == 'pull_request' && (
-      github.event.action == 'synchronize'
-      || github.event.action == 'opened'
-      || github.event.action == 'reopened'))
+    if: false
     runs-on: ubuntu-latest
     permissions:
       contents: read
@@ -108,7 +103,7 @@ jobs:
   delete_neon_branch:
     name: Delete Neon Branch
     needs: setup
-    if: github.event_name == 'pull_request' && github.event.action == 'closed'
+    if: false
     runs-on: ubuntu-latest
     steps:
       - name: Delete Neon Branch
