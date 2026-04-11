@@ -46,6 +46,8 @@ jobs:
 
       - name: Run migrations on test database
         run: npx prisma migrate deploy
+        env:
+          DATABASE_URL: postgresql://postgres:postgres@localhost:5432/order_management_test?schema=public
 
       - name: Type Check
         run: npm run typecheck
@@ -97,6 +99,8 @@ jobs:
 
       - name: Run migrations on test database
         run: npx prisma migrate deploy
+        env:
+          DATABASE_URL: postgresql://postgres:postgres@localhost:5432/order_management_test?schema=public
 
       - name: Run Full Test Suite
         run: npm run test -- --reporter=default
