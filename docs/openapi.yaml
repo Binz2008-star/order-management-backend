@@ -1,0 +1,490 @@
+openapi: 3.0.3
+info:
+  title: Order Management Backend API
+  description: Production-verified order management backend for social seller operations
+  version: 1.0.0
+  contact:
+    name: API Support
+    email: support@example.com
+  license:
+    name: MIT
+
+servers:
+  - url: https://api.order-management.example.com
+    description: Production server
+  - url: https://staging-api.order-management.example.com
+    description: Staging server
+  - url: http://localhost:3000
+    description: Development server
+
+paths:
+  /api/auth/login:
+    post:
+      summary: Authenticate user
+      description: Authenticate a user with email and password
+      tags:
+        - Authentication
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required:
+                - email
+                - password
+              properties:
+                email:
+                  type: string
+                  format: email
+                  description: User email address
+                password:
+                  type: string
+                  format: password
+                  description: User password
+      responses:
+        '200':
+          description: Authentication successful
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                  data:
+                    type: object
+                    properties:
+                      user:
+                        $ref: '#/components/schemas/AuthUser'
+                      token:
+                        type: string
+                        description: JWT authentication token
+        '401':
+          description: Invalid credentials
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '500':
+          description: Internal server error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+
+  /api/health:
+    get:
+      summary: Health check
+      description: Check if the API is running and healthy
+      tags:
+        - Health
+      responses:
+        '200':
+          description: API is healthy
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  status:
+                    type: string
+                    example: healthy
+                  database:
+                    type: string
+                    example: connected
+                  timestamp:
+                    type: string
+                    format: date-time
+
+  /api/public/{sellerSlug}/orders:
+    get:
+      summary: Get public orders for seller
+      description: Retrieve public orders for a specific seller
+      tags:
+        - Public API
+      parameters:
+        - name: sellerSlug
+          in: path
+          required: true
+          schema:
+            type: string
+          description: Seller slug identifier
+        - name: page
+          in: query
+          schema:
+            type: integer
+            default: 1
+          description: Page number for pagination
+        - name: limit
+          in: query
+          schema:
+            type: integer
+            default: 10
+          description: Number of items per page
+      responses:
+        '200':
+          description: Orders retrieved successfully
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                  data:
+                    type: object
+                    properties:
+                      orders:
+                        type: array
+                        items:
+                          $ref: '#/components/schemas/Order'
+                      pagination:
+                        $ref: '#/components/schemas/Pagination'
+        '404':
+          description: Seller not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+
+  /api/public/{sellerSlug}/checkout:
+    post:
+      summary: Create order checkout
+      description: Create a new order for checkout
+      tags:
+        - Public API
+      parameters:
+        - name: sellerSlug
+          in: path
+          required: true
+          schema:
+            type: string
+          description: Seller slug identifier
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CheckoutRequest'
+      responses:
+        '200':
+          description: Order created successfully
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                  data:
+                    $ref: '#/components/schemas/Order'
+        '400':
+          description: Invalid request
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '429':
+          description: Rate limit exceeded
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+
+  /api/seller/orders:
+    get:
+      summary: Get seller orders
+      description: Retrieve orders for the authenticated seller
+      tags:
+        - Seller API
+      security:
+        - bearerAuth: []
+      responses:
+        '200':
+          description: Orders retrieved successfully
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                  data:
+                    type: object
+                    properties:
+                      orders:
+                        type: array
+                        items:
+                          $ref: '#/components/schemas/Order'
+                      pagination:
+                        $ref: '#/components/schemas/Pagination'
+        '401':
+          description: Unauthorized
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+
+    post:
+      summary: Create new order
+      description: Create a new order
+      tags:
+        - Seller API
+      security:
+        - bearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CreateOrderRequest'
+      responses:
+        '200':
+          description: Order created successfully
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                  data:
+                    $ref: '#/components/schemas/Order'
+        '400':
+          description: Invalid request
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+
+  /api/seller/orders/{orderId}/status:
+    patch:
+      summary: Update order status
+      description: Update the status of an existing order
+      tags:
+        - Seller API
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: orderId
+          in: path
+          required: true
+          schema:
+            type: string
+          description: Order ID
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required:
+                - status
+              properties:
+                status:
+                  type: string
+                  enum: [PENDING, CONFIRMED, SHIPPED, DELIVERED, CANCELLED]
+                  description: New order status
+      responses:
+        '200':
+          description: Order status updated successfully
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                  data:
+                    $ref: '#/components/schemas/Order'
+        '404':
+          description: Order not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+
+components:
+  schemas:
+    AuthUser:
+      type: object
+      properties:
+        id:
+          type: string
+          description: User ID
+        email:
+          type: string
+          format: email
+          description: User email
+        role:
+          type: string
+          enum: [STAFF, SELLER, ADMIN]
+          description: User role
+        sellerId:
+          type: string
+          nullable: true
+          description: Associated seller ID
+
+    Order:
+      type: object
+      properties:
+        id:
+          type: string
+          description: Order ID
+        sellerId:
+          type: string
+          description: Seller ID
+        customerId:
+          type: string
+          description: Customer ID
+        status:
+          type: string
+          enum: [PENDING, CONFIRMED, SHIPPED, DELIVERED, CANCELLED]
+          description: Order status
+        totalMinor:
+          type: integer
+          description: Total amount in minor units (cents)
+        currency:
+          type: string
+          default: USD
+          description: Currency code
+        createdAt:
+          type: string
+          format: date-time
+          description: Order creation timestamp
+        updatedAt:
+          type: string
+          format: date-time
+          description: Order update timestamp
+
+    CheckoutRequest:
+      type: object
+      required:
+        - items
+        - customerEmail
+      properties:
+        items:
+          type: array
+          items:
+            type: object
+            required:
+              - productId
+              - quantity
+            properties:
+              productId:
+                type: string
+                description: Product ID
+              quantity:
+                type: integer
+                minimum: 1
+                description: Quantity
+        customerEmail:
+          type: string
+          format: email
+          description: Customer email
+        shippingAddress:
+          $ref: '#/components/schemas/Address'
+
+    CreateOrderRequest:
+      type: object
+      required:
+        - items
+        - customerEmail
+      properties:
+        items:
+          type: array
+          items:
+            type: object
+            required:
+              - productId
+              - quantity
+              - priceMinor
+            properties:
+              productId:
+                type: string
+                description: Product ID
+              quantity:
+                type: integer
+                minimum: 1
+                description: Quantity
+              priceMinor:
+                type: integer
+                description: Price in minor units
+        customerEmail:
+          type: string
+          format: email
+          description: Customer email
+        shippingAddress:
+          $ref: '#/components/schemas/Address'
+
+    Address:
+      type: object
+      required:
+        - street
+        - city
+        - state
+        - postalCode
+        - country
+      properties:
+        street:
+          type: string
+          description: Street address
+        city:
+          type: string
+          description: City
+        state:
+          type: string
+          description: State/Province
+        postalCode:
+          type: string
+          description: Postal code
+        country:
+          type: string
+          description: Country code
+
+    Pagination:
+      type: object
+      properties:
+        page:
+          type: integer
+          description: Current page number
+        limit:
+          type: integer
+          description: Items per page
+        total:
+          type: integer
+          description: Total number of items
+        totalPages:
+          type: integer
+          description: Total number of pages
+
+    ErrorResponse:
+      type: object
+      properties:
+        success:
+          type: boolean
+          example: false
+        error:
+          type: string
+          description: Error message
+        status:
+          type: integer
+          description: HTTP status code
+
+  securitySchemes:
+    bearerAuth:
+      type: http
+      scheme: bearer
+      bearerFormat: JWT
+      description: JWT authentication token
+
+tags:
+  - name: Authentication
+    description: User authentication endpoints
+  - name: Health
+    description: Health check endpoints
+  - name: Public API
+    description: Public endpoints for customers
+  - name: Seller API
+    description: Seller-specific endpoints (authentication required)
