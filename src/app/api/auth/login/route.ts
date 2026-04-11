@@ -1,23 +1,24 @@
+import { NextRequest } from 'next/server';
 import {
   authenticateUser,
   type LoginInput
-} from '@/app/api/services/auth-boundary';
+} from '../../services/auth-boundary';
 import {
   createErrorResponse,
   createSuccessResponse,
   validateJsonBody
-} from '@/app/api/services/route-boundary';
-import { NextRequest } from 'next/server';
+} from '../../services/route-boundary';
 
 // Simple validation schema for login
 const LoginSchema = {
-  parse: (data: { email?: string; password?: string }): LoginInput => {
-    if (!data.email || !data.password) {
+  parse: (data: unknown): LoginInput => {
+    const parsed = data as { email?: string; password?: string }
+    if (!parsed.email || !parsed.password) {
       throw new Error('Email and password are required')
     }
     return {
-      email: data.email,
-      password: data.password
+      email: parsed.email,
+      password: parsed.password
     }
   }
 }
