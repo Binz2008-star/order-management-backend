@@ -28,9 +28,6 @@ export function validateProductionEnvironment(): EnvValidationResult {
   ]
 
   const optional = [
-    'REDIS_URL',
-    'UPSTASH_REDIS_REST_URL',
-    'UPSTASH_REDIS_REST_TOKEN',
     'STRIPE_WEBHOOK_SECRET',
     'WHATSAPP_WEBHOOK_SECRET',
     'CRON_SECRET',
@@ -55,16 +52,23 @@ export function validateProductionEnvironment(): EnvValidationResult {
     }
   }
 
-  // Production-specific checks
+  // Production-specific hard requirements
   if (process.env.NODE_ENV === 'production') {
-    if (!process.env.REDIS_URL && !process.env.UPSTASH_REDIS_REST_URL) {
-      warnings.push('Rate limiting will fall back to in-memory storage - not recommended for production')
+    // Redis is REQUIRED in production — in-memory fallback is not safe for multi-instance/serverless.
+    // Each instance would have its own counter, making rate limits per-instance instead of global.
+    const hasRedis = !!process.env.REDIS_URL || !!process.env.UPSTASH_REDIS_REST_URL
+    if (!hasRedis) {
+      errors.push(
+        'REDIS_URL or UPSTASH_REDIS_REST_URL is required in production. ' +
+        'In-memory rate limiting is not safe for multi-instance deployments. ' +
+        'Set one of these environment variables before deploying.'
+      )
     } else if (process.env.UPSTASH_REDIS_REST_URL && !process.env.UPSTASH_REDIS_REST_TOKEN) {
       errors.push('UPSTASH_REDIS_REST_TOKEN is required when UPSTASH_REDIS_REST_URL is configured')
     }
 
     if (process.env.DATABASE_URL?.includes('dev.db')) {
-      warnings.push('Using development database in production')
+      errors.push('DATABASE_URL points to a development SQLite file. Use a PostgreSQL URL in production.')
     }
 
     if (!process.env.CRON_SECRET) {
@@ -84,15 +88,27 @@ if (process.env.NODE_ENV === 'production') {
   const validation = validateProductionEnvironment()
   
   if (!validation.isValid) {
-    console.error('❌ Production environment validation failed:')
-    validation.errors.forEach(error => console.error(`  - ${error}`))
-    throw new Error('Production environment validation failed')
+    process.stderr.write(
+      JSON.stringify({
+        level: 'ERROR',
+        message: 'Production environment validation failed',
+        errors: validation.errors,
+      }) + '\n'
+    )
+    throw new Error(
+      `Production environment validation failed:\n${validation.errors.map((e) => `  - ${e}`).join('\n')}`
+    )
   }
-  
+
   if (validation.warnings.length > 0) {
-    console.warn('⚠️  Production environment warnings:')
-    validation.warnings.forEach(warning => console.warn(`  - ${warning}`))
+    process.stderr.write(
+      JSON.stringify({
+        level: 'WARN',
+        message: 'Production environment warnings',
+        warnings: validation.warnings,
+      }) + '\n'
+    )
   }
-  
-  console.log('✅ Production environment validation passed')
+
+  process.stdout.write(JSON.stringify({ level: 'INFO', message: 'Production environment validation passed' }) + '\n')
 }

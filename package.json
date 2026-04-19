@@ -29,6 +29,8 @@
     "postinstall": "prisma generate",
     "migrate:deploy": "prisma migrate deploy",
     "release:proof": "tsx scripts/release-proof-core-flow.ts",
+    "release:discipline": "tsx scripts/release-discipline.ts",
+    "generate:sdk": "tsx scripts/generate-sdk.ts",
     "env:generate": "node scripts/generate-production-env.js",
     "verify:prod": "tsx scripts/verify-production.ts",
     "quick:check": "node scripts/quick-check.js"
