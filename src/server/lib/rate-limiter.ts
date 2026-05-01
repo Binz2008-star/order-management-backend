@@ -22,6 +22,22 @@ interface RateLimitRequest {
   path?: string;
 }
 
+interface RateLimitResponseBody {
+  error: string;
+  message: string;
+  retryAfter?: number;
+}
+
+interface RateLimitResponse {
+  set(headers: Record<string, string | number | undefined>): void;
+  set(name: string, value: string | number | undefined): void;
+  status(code: number): {
+    json(body: RateLimitResponseBody): unknown;
+  };
+}
+
+type NextFunction = () => void;
+
 export interface RateLimitConfig {
   windowMs: number;      // Time window in milliseconds
   maxRequests: number;   // Maximum requests per window
@@ -201,7 +217,7 @@ export const RateLimitConfigs = {
 export function createRateLimitMiddleware(config: RateLimitConfig, keyPrefix?: string) {
   const rateLimiter = new RateLimiter(config, keyPrefix);
 
-  return async (req: RateLimitRequest, res: any, next: any) => {
+  return async (req: RateLimitRequest, res: RateLimitResponse, next: NextFunction) => {
     try {
       const result = await rateLimiter.checkRateLimit(req);
 
