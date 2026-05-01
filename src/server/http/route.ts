@@ -1,5 +1,3 @@
-import { type NextRequest, type NextResponse } from 'next/server'
-import { type ZodType } from 'zod'
 import { type AuthUser } from '@/server/lib/auth'
 import { generateRequestId, logger } from '@/server/lib/logger'
 import {
@@ -7,6 +5,8 @@ import {
   type RateLimitResponse,
   createRateLimit,
 } from '@/server/lib/rate-limit'
+import { type NextRequest, type NextResponse } from 'next/server'
+import { type ZodType } from 'zod'
 import { ApiError, toApiError } from './api-error'
 import { requireRequestAdmin, requireRequestSeller, requireRequestUser } from './auth-guard'
 import { jsonError, jsonSuccess } from './response'
@@ -41,16 +41,27 @@ function emptyValue<T>(): T {
   return undefined as T
 }
 
-function parseJsonBody<T>(request: NextRequest, schema?: ZodType<T>): Promise<T> | T {
+async function parseJsonBody<T>(request: NextRequest, schema?: ZodType<T>): Promise<T> {
   if (!schema) {
     return emptyValue<T>()
   }
 
-  return request.json()
-    .catch(() => {
-      throw new ApiError(400, 'Invalid JSON body', 'INVALID_JSON')
+  // Clone request to avoid consuming body if already read
+  const clonedRequest = request.clone()
+
+  try {
+    const payload = await clonedRequest.json()
+    return schema.parse(payload)
+  } catch (error) {
+    // Log detailed error for debugging
+    console.error('PARSE_JSON_ERROR:', {
+      error: error instanceof Error ? error.message : String(error),
+      url: request.url,
+      method: request.method,
+      contentType: request.headers.get('content-type'),
     })
-    .then((payload) => schema.parse(payload))
+    throw new ApiError(400, 'Invalid JSON body', 'INVALID_JSON')
+  }
 }
 
 function parseQuery<T>(request: NextRequest, schema?: ZodType<T>): T {
@@ -148,6 +159,14 @@ export function createRouteHandler<
         headers: response.headers ?? rateLimitHeaders,
       })
     } catch (error) {
+      console.error('ROUTE_HANDLER_ERROR', {
+        message: error instanceof Error ? error.message : error,
+        stack: error instanceof Error ? error.stack : undefined,
+        requestId,
+        path: request.url,
+        method: request.method,
+      })
+
       const apiError = toApiError(error)
       logger.error('Route handler failed', apiError, { requestId, path: request.url, method: request.method })
       return jsonError(apiError, requestId)

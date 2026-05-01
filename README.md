@@ -1,18 +1,36 @@
 # Order Management Backend
 
-Production-verified order management backend for social seller operations.
+Order management backend for social seller operations.
 
 ## Current Status
 
-### ✅ Production Verified
+### 🔧 Code Fixed - Awaiting Runtime Verification
 
-- **Database**: PostgreSQL on Neon with production data and connectivity verified
-- **Deployment**: Vercel production runtime fully operational
-- **Authentication**: bcrypt-backed login and JWT issuance working in production
-- **Health Checks**: `/api/health` performing real database connectivity checks
-- **Order Creation**: Production-verified order creation with proper transaction handling
-- **Route Handler Factory**: Centralized error handling and auth middleware implemented
-- **Transaction Hardening**: 15-second timeout with proper error mapping for database issues
+- **Database**: PostgreSQL schema ready, requires DATABASE_URL configuration
+- **Deployment**: Build passes, requires production environment variables
+- **Authentication**: ✅ Fixed - Real database auth implemented (previously mock)
+- **Health Checks**: `/api/health` implemented, requires database connection
+- **Order Creation**: Service layer ready, requires database connectivity
+- **Route Handler Factory**: ✅ Enhanced error handling with request cloning
+- **Transaction Hardening**: 15-second timeout with proper error mapping
+
+### ⚠️ Known Issues
+
+- **Local Testing**: Database connection required for full E2E validation
+- **Release Proof**: Requires `DATABASE_URL` and `JWT_SECRET` environment variables
+- **Status**: Code verified, runtime validation pending database connectivity
+
+### ⚠️ Release Readiness
+
+**Authentication has been verified locally.**
+
+**Full order creation proof is still blocked because Runtime does not own product catalog data.**
+
+This repository is not release-ready until:
+- Runtime-only proof is defined and passing, OR
+- Cross-service proof (Runtime + Sellora) is defined and passing
+
+See `SYSTEM_CONTRACT.md` for architecture details.
 
 ## Architecture
 
