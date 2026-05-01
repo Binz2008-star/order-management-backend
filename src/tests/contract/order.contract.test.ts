@@ -9,6 +9,7 @@
  * - No fallback logic - setup failures fail the test immediately
  */
 
+import { safeFetch } from '@/shared/runtime-client/safe-fetch';
 import { ErrorSchema } from '@/shared/schemas/error';
 import { OrderCreateResponseSchema, OrderResponseSchema } from '@/shared/schemas/order-response';
 import {
@@ -22,6 +23,7 @@ import {
   getValidTestProductId,
 } from '@/tests/factories';
 import { afterAll, beforeAll, describe, expect, test } from 'vitest';
+import { z } from 'zod';
 
 // Test configuration
 const TEST_BASE_URL = process.env.TEST_API_URL || 'http://localhost:3000';
@@ -60,20 +62,29 @@ describe('Order API Contract Tests', () => {
     });
 
     // Authenticate via HTTP login endpoint
-    const loginResponse = await fetch(`${TEST_BASE_URL}/api/auth/login`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        email: testUser.email,
-        password: testUser.plainPassword,
+    const loginResponse = await safeFetch(
+      `${TEST_BASE_URL}/api/auth/login`,
+      z.object({
+        token: z.string(),
+        user: z.object({
+          id: z.string(),
+          email: z.string(),
+          role: z.string(),
+          sellerId: z.string(),
+        }),
       }),
-    });
+      {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          email: testUser.email,
+          password: testUser.plainPassword,
+        }),
+      }
+    );
 
-    if (!loginResponse.ok) {
-      throw new Error(`Auth setup failed: ${await loginResponse.text()}`);
-    }
-
-    const loginData = await loginResponse.json();
+    // safeFetch already validates the response, no need to check .ok
+    const loginData = loginResponse;
 
     // Assert auth contract explicitly
     expect(loginData).toHaveProperty('token');
@@ -119,22 +130,21 @@ describe('Order API Contract Tests', () => {
         notes: 'Contract test order',
       };
 
-      const response = await fetch(`${TEST_BASE_URL}/api/v1/orders`, {
-        method: 'POST',
-        headers: {
-          'Authorization': `Bearer ${authToken}`,
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify(orderPayload),
-      });
+      const response = await safeFetch(
+        `${TEST_BASE_URL}/api/v1/orders`,
+        OrderCreateResponseSchema,
+        {
+          method: 'POST',
+          headers: {
+            'Authorization': `Bearer ${authToken}`,
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify(orderPayload),
+        }
+      );
 
-      expect(response.ok).toBe(true);
-      expect(response.status).toBe(200);
-
-      const json = await response.json();
-
-      // Contract validation - must parse without throwing
-      const validated = OrderCreateResponseSchema.parse(json);
+      // safeFetch already validates the response and returns typed data
+      const validated = response;
 
       // Verify contract structure
       expect(validated.success).toBe(true);
@@ -398,4 +408,3 @@ describe('Order API Contract Tests', () => {
     });
   });
 });
-
