@@ -20,6 +20,18 @@ Order management backend for social seller operations.
 - **Release Proof**: Requires `DATABASE_URL` and `JWT_SECRET` environment variables
 - **Status**: Code verified, runtime validation pending database connectivity
 
+### ⚠️ Release Readiness
+
+**Authentication has been verified locally.**
+
+**Full order creation proof is still blocked because Runtime does not own product catalog data.**
+
+This repository is not release-ready until:
+- Runtime-only proof is defined and passing, OR
+- Cross-service proof (Runtime + Sellora) is defined and passing
+
+See `SYSTEM_CONTRACT.md` for architecture details.
+
 ## Architecture
 
 - **Route Handler Factory**: Centralized HTTP request handling with auth, validation, and rate limiting

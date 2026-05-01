@@ -67,8 +67,8 @@ DELETE /api/auth/login        // Logout
 GET /api/me                   // Returns: AuthUser
 
 // Public Order API (Runtime owns)
-GET /api/public/{sellerSlug}/products
-POST /api/public/{sellerSlug}/orders
+GET /api/public/{sellerSlug}/products  # Returns products from Sellora catalog
+POST /api/public/{sellerSlug}/orders  # Creates order with product references from Sellora
 
 // Seller API (Runtime owns)
 GET /api/seller/orders
