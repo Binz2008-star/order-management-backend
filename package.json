@@ -33,7 +33,8 @@
     "env:generate": "node scripts/generate-production-env.js",
     "verify:prod": "tsx scripts/verify-production.ts",
     "quick:check": "node scripts/quick-check.js",
-    "ai:worker": "tsx src/server/modules/ai/simple-worker.ts"
+    "ai:worker": "tsx src/server/modules/ai/simple-worker.ts",
+    "generate-sdk": "tsx scripts/generate-sdk.ts"
   },
   "dependencies": {
     "@asteasolutions/zod-to-openapi": "8.5.0",

@@ -1,41 +1,3 @@
-// === SDK GENERATION SCRIPT ===
-// Generates TypeScript types and SDK from OpenAPI spec
-
-import { execSync } from "child_process";
-import { mkdirSync, writeFileSync } from "fs";
-import { join } from "path";
-
-// === CONFIGURATION ===
-
-const OPENAPI_URL = "http://localhost:3000/api/openapi";
-const OUTPUT_DIR = join(__dirname, "../src/generated");
-const TYPES_FILE = join(OUTPUT_DIR, "runtime-api.ts");
-const SDK_FILE = join(OUTPUT_DIR, "runtime-sdk.ts");
-
-// === TYPE GENERATION ===
-
-function generateTypes() {
-  console.log("Generating TypeScript types from OpenAPI spec...");
-
-  try {
-    // Generate types using openapi-typescript
-    execSync(`npx openapi-typescript ${OPENAPI_URL} -o ${TYPES_FILE}`, {
-      stdio: "inherit",
-    });
-
-    console.log(`Types generated: ${TYPES_FILE}`);
-  } catch (error) {
-    console.error("Failed to generate types:", error);
-    process.exit(1);
-  }
-}
-
-// === SDK GENERATION ===
-
-function generateSDK() {
-  console.log("Generating typed SDK...");
-
-  const sdkCode = `
 // === AUTO-GENERATED RUNTIME SDK ===
 // Generated from OpenAPI spec - DO NOT EDIT MANUALLY
 
@@ -64,7 +26,7 @@ export class RuntimeSDK {
     method: keyof paths[keyof paths],
     options?: RequestInit & { params?: Record<string, any> }
   ): Promise<T> {
-    const url = new URL(\`\${this.baseUrl}\${path}\`, this.baseUrl);
+    const url = new URL(`${this.baseUrl}${path}`, this.baseUrl);
 
     // Add query parameters
     if (options?.params) {
@@ -77,7 +39,7 @@ export class RuntimeSDK {
 
     const headers: Record<string, string> = {
       "Content-Type": "application/json",
-      ...(this.token ? { Authorization: \`Bearer \${this.token}\` } : {}),
+      ...(this.token ? { Authorization: `Bearer ${this.token}` } : {}),
       ...(options?.headers as Record<string, string> || {}),
     };
 
@@ -96,7 +58,7 @@ export class RuntimeSDK {
       clearTimeout(timeoutId);
 
       if (!response.ok) {
-        throw new Error(\`API request failed: \${response.status} \${response.statusText}\`);
+        throw new Error(`API request failed: ${response.status} ${response.statusText}`);
       }
 
       return response.json() as Promise<T>;
@@ -132,7 +94,7 @@ export class RuntimeSDK {
   async getOrder(id: string): Promise<
     paths["/api/v1/orders/{id}"]["get"]["responses"]["200"]["content"]["application/json"]
   > {
-    return this.request(\`/api/v1/orders/\${id}\`, "get");
+    return this.request(`/api/v1/orders/${id}` as any, "get");
   }
 
   /**
@@ -144,7 +106,7 @@ export class RuntimeSDK {
   ): Promise<
     paths["/api/v1/orders/{id}"]["put"]["responses"]["200"]["content"]["application/json"]
   > {
-    return this.request(\`/api/v1/orders/\${id}\`, "put", { body: JSON.stringify(body) });
+    return this.request(`/api/v1/orders/${id}` as any, "put", { body: JSON.stringify(body) });
   }
 
   /**
@@ -156,7 +118,7 @@ export class RuntimeSDK {
   ): Promise<
     paths["/api/v1/orders/{id}/status"]["put"]["responses"]["200"]["content"]["application/json"]
   > {
-    return this.request(\`/api/v1/orders/\${id}/status\`, "put", { body: JSON.stringify(body) });
+    return this.request(`/api/v1/orders/${id}/status` as any, "put", { body: JSON.stringify(body) });
   }
 
   // === UTILITY METHODS ===
@@ -165,12 +127,12 @@ export class RuntimeSDK {
    * Check API health
    */
   async healthCheck(): Promise<{ status: string }> {
-    const response = await fetch(\`\${this.baseUrl}/api/health\`, {
-      headers: this.token ? { Authorization: \`Bearer \${this.token}\` } : {},
+    const response = await fetch(`${this.baseUrl}/api/health`, {
+      headers: this.token ? { Authorization: `Bearer ${this.token}` } : {},
     });
 
     if (!response.ok) {
-      throw new Error(\`Health check failed: \${response.status}\`);
+      throw new Error(`Health check failed: ${response.status}`);
     }
 
     return response.json();
@@ -194,8 +156,7 @@ export class RuntimeSDK {
 // === TYPE EXPORTS ===
 
 export type {
-  paths,
-  components,
+  components, paths
 } from "./runtime-api";
 
 // === CONVENIENCE TYPES ===
@@ -212,60 +173,3 @@ export type ErrorResponse = {
     timestamp?: string;
   };
 };
-`;
-
-  try {
-    mkdirSync(OUTPUT_DIR, { recursive: true });
-    writeFileSync(SDK_FILE, sdkCode.trim());
-    console.log(`SDK generated: ${SDK_FILE}`);
-  } catch (error) {
-    console.error("Failed to generate SDK:", error);
-    process.exit(1);
-  }
-}
-
-// === MAIN EXECUTION ===
-
-async function main() {
-  console.log("Starting SDK generation...");
-
-  // Ensure output directory exists
-  mkdirSync(OUTPUT_DIR, { recursive: true });
-
-  // Generate types first, then SDK
-  generateTypes();
-  generateSDK();
-
-  console.log("SDK generation completed successfully!");
-  console.log(`Types: ${TYPES_FILE}`);
-  console.log(`SDK: ${SDK_FILE}`);
-
-  // Show usage example
-  console.log("\n=== USAGE EXAMPLE ===");
-  console.log(`
-import { RuntimeSDK } from "@/generated/runtime-sdk";
-
-const sdk = RuntimeSDK.withToken("http://localhost:3000", "your-token");
-
-// Create order
-const order = await sdk.createOrder({
-  sellerId: "seller_123",
-  customerId: "customer_456",
-  items: [{ productId: "product_789", quantity: 2 }],
-  paymentType: "CASH_ON_DELIVERY",
-});
-
-// List orders
-const orders = await sdk.getOrders({ page: 1, limit: 10, status: "PENDING" });
-`);
-}
-
-// Run if called directly
-if (require.main === module) {
-  main().catch((error) => {
-    console.error("SDK generation failed:", error);
-    process.exit(1);
-  });
-}
-
-export { main as generateSDK };
