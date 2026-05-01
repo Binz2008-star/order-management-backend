@@ -18,6 +18,10 @@ function generateTypes() {
   console.log("Generating TypeScript types from OpenAPI spec...");
 
   try {
+    // First ensure OpenAPI spec is generated from source-of-truth
+    console.log("Ensuring OpenAPI spec is up-to-date...");
+    execSync("npm run generate-openapi", { stdio: "inherit" });
+
     // Generate types using openapi-typescript
     execSync(`npx openapi-typescript ${OPENAPI_FILE} -o ${TYPES_FILE}`, {
       stdio: "inherit",
