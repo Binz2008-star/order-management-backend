@@ -12,9 +12,6 @@ export interface RateLimitConfig {
   keyGenerator?: (request: NextRequest) => string
 }
 
-// Memory-based fallback for development/testing
-const defaultStore = new Map<string, { count: number; resetTime: number }>()
-
 export class RateLimiter {
   constructor(private config: RateLimitConfig) { }
 
@@ -31,7 +28,7 @@ export class RateLimiter {
   }
 
   async isAllowed(request: NextRequest): Promise<{ allowed: boolean; remaining: number; resetTime: number }> {
-    // Try new service first, fallback to memory for backward compatibility
+    // Use Redis-backed rate limiting directly
     try {
       const newRateLimit = createNewRateLimit(this.config)
       const result = await newRateLimit(request)
@@ -39,40 +36,10 @@ export class RateLimiter {
         { allowed: true, remaining: parseInt(result.headers['X-RateLimit-Remaining']), resetTime: new Date(result.headers['X-RateLimit-Reset']).getTime() } :
         { allowed: false, remaining: parseInt(result.headers['X-RateLimit-Remaining']), resetTime: new Date(result.headers['X-RateLimit-Reset']).getTime() }
     } catch (error) {
-      logger.warn('New rate limiting failed, using memory fallback', { error: error instanceof Error ? error.message : 'Unknown error' })
-      return this.isAllowedMemory(request)
+      const errorMessage = error instanceof Error ? error.message : 'Unknown error'
+      logger.error(`Redis rate limiting failed: ${errorMessage}`)
+      throw new Error('Rate limiting service unavailable')
     }
-  }
-
-  private isAllowedMemory(request: NextRequest): { allowed: boolean; remaining: number; resetTime: number } {
-    const key = this.getKey(request)
-    const now = Date.now()
-    const windowMs = this.config.windowMs
-
-    let record = defaultStore.get(key)
-
-    if (!record || now > record.resetTime) {
-      record = {
-        count: 1,
-        resetTime: now + windowMs
-      }
-      defaultStore.set(key, record)
-    } else {
-      record.count++
-    }
-
-    const allowed = record.count <= this.config.maxRequests
-    const remaining = Math.max(0, this.config.maxRequests - record.count)
-
-    if (!allowed) {
-      logger.warn('Rate limit exceeded (memory fallback)', {
-        key,
-        count: record.count,
-        limit: this.config.maxRequests,
-      })
-    }
-
-    return { allowed, remaining, resetTime: record.resetTime }
   }
 }
 
@@ -107,3 +74,4 @@ export function createRateLimit(config: RateLimitConfig) {
 
 // Export Redis configurations for easy migration
 export { RATE_LIMIT_CONFIGS }
+

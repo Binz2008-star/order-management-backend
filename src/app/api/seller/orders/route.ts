@@ -2,8 +2,9 @@ import { prisma } from '@/server/db/prisma'
 import { getCurrentUser, requireSeller } from '@/server/lib/auth'
 import { withQueryValidation } from '@/server/lib/errors'
 import { PaginationSchema } from '@/server/lib/validation'
+import { GetOrdersSchema } from '@/shared/schemas/orders'
 import { NextRequest, NextResponse } from 'next/server'
-import type { z } from 'zod'
+import { z } from 'zod'
 
 type PaginationQuery = z.infer<typeof PaginationSchema>
 
@@ -86,6 +87,9 @@ async function getOrders(query: PaginationQuery, request: NextRequest) {
   })
 }
 
-export const GET = withQueryValidation(PaginationSchema, (data, request) =>
+// POST removed: order creation is handled exclusively by /api/v1/orders
+// via v1-order.authority.ts to ensure single authority, event emission, and contract enforcement.
+
+export const GET = withQueryValidation(GetOrdersSchema, (data, request) =>
   getOrders(data, request)
 )

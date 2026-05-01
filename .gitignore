@@ -36,6 +36,13 @@ yarn-error.log*
 # vercel
 .vercel
 
+# IDE
+.vscode/
+
+# audit artifacts
+l1-enforcement-evidence.json
+l1-violations.log
+
 # typescript
 *.tsbuildinfo
 next-env.d.ts

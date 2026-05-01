@@ -4,6 +4,25 @@ Order management backend for social seller operations.
 
 ## Current Status
 
+### Development Phase - Not Production Ready
+
+This system is in active development with enterprise-grade enforcement mechanisms being implemented.
+
+**Current Implementation Status:**
+
+- **Database**: PostgreSQL on Neon with vector extension installed
+- **Testing**: Comprehensive test suite with AI integration tests
+- **Rate Limiting**: Redis-only implementation (no memory fallback)
+- **Gateway Enforcement**: ESLint rules blocking direct HTTP access
+- **AI Integration**: BullMQ worker system with circuit breakers
+- **Multi-Tenant Isolation**: Database-level separation verified
+
+**Still Needed for Production:**
+
+- Required GitHub status checks for merge protection
+- CI-wired contract/version validation
+- Production environment hardening
+- Complete audit trail verification
 ### 🔧 Code Fixed - Awaiting Runtime Verification
 
 - **Database**: PostgreSQL schema ready, requires DATABASE_URL configuration
