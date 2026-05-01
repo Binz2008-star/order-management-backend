@@ -1,31 +1,25 @@
 // === OPENAPI GENERATOR ===
-// Generates OpenAPI spec from running server
+// Generates OpenAPI spec from source-of-truth (Zod schemas)
 
-import { execSync } from "child_process";
 import { writeFileSync } from "fs";
+import { OpenApiDocument } from "../src/shared/openapi/generator";
 
-const OPENAPI_URL = "http://localhost:3000/api/openapi";
 const OUTPUT_FILE = "generated-openapi.json";
 
 async function main() {
-  console.log("Generating OpenAPI spec from running server...");
-  
+  console.log("Generating OpenAPI spec from source-of-truth (Zod schemas)...");
+
   try {
-    // Fetch OpenAPI spec from running server
-    const response = await fetch(OPENAPI_URL);
-    
-    if (!response.ok) {
-      throw new Error(`Failed to fetch OpenAPI spec: ${response.status} ${response.statusText}`);
-    }
-    
-    const openApiSpec = await response.json();
-    
+    // Generate OpenAPI spec from source-of-truth
+    const openApiSpec = OpenApiDocument;
+
     // Write to file
-    writeFileSync(OUTPUT_FILE, JSON.stringify(openApiSpec, null, 2));
-    
+    writeFileSync(OUTPUT_FILE, JSON.stringify(openApiSpec, null, 2) + "\n", "utf8");
+
     console.log(`OpenAPI spec generated: ${OUTPUT_FILE}`);
     console.log(`Size: ${JSON.stringify(openApiSpec).length} characters`);
-    
+    console.log("Source: Zod schemas (source-of-truth)");
+
   } catch (error) {
     console.error("Failed to generate OpenAPI spec:", error);
     process.exit(1);
