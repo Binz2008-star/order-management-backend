@@ -60,7 +60,7 @@ export class RuntimeSDK {
   private readonly timeoutMs: number;
 
   constructor(options: RuntimeClientOptions) {
-    this.baseUrl = options.baseUrl.replace(/\/$/, "");
+    this.baseUrl = options.baseUrl.replace(/\\/$/, "");
     this.token = options.token;
     this.timeoutMs = options.timeoutMs || 10000;
   }
