@@ -7,7 +7,7 @@ import { join } from "path";
 
 // === CONFIGURATION ===
 
-const OPENAPI_URL = "http://localhost:3000/api/openapi";
+const OPENAPI_FILE = join(__dirname, "../generated-openapi.json");
 const OUTPUT_DIR = join(__dirname, "../src/generated");
 const TYPES_FILE = join(OUTPUT_DIR, "runtime-api.ts");
 const SDK_FILE = join(OUTPUT_DIR, "runtime-sdk.ts");
@@ -18,8 +18,12 @@ function generateTypes() {
   console.log("Generating TypeScript types from OpenAPI spec...");
 
   try {
+    // First ensure OpenAPI spec is generated from source-of-truth
+    console.log("Ensuring OpenAPI spec is up-to-date...");
+    execSync("npm run generate-openapi", { stdio: "inherit" });
+
     // Generate types using openapi-typescript
-    execSync(`npx openapi-typescript ${OPENAPI_URL} -o ${TYPES_FILE}`, {
+    execSync(`npx openapi-typescript ${OPENAPI_FILE} -o ${TYPES_FILE}`, {
       stdio: "inherit",
     });
 
@@ -40,6 +44,8 @@ function generateSDK() {
 // Generated from OpenAPI spec - DO NOT EDIT MANUALLY
 
 import type { paths } from "./runtime-api";
+import { safeFetch } from "@/shared/runtime-client/safe-fetch";
+import { z } from "zod";
 
 export interface RuntimeClientOptions {
   baseUrl: string;
@@ -85,21 +91,24 @@ export class RuntimeSDK {
     const timeoutId = setTimeout(() => controller.abort(), this.timeoutMs);
 
     try {
-      const response = await fetch(url.toString(), {
-        method: method.toUpperCase(),
-        headers,
-        body: options?.body,
-        signal: controller.signal,
-        ...options,
-      });
+      // Create a simple schema for the response
+      const responseSchema = z.any();
+
+      const response = await safeFetch(
+        url.toString(),
+        responseSchema,
+        {
+          method: method.toUpperCase(),
+          headers,
+          body: options?.body,
+          signal: controller.signal,
+          ...options,
+        }
+      );
 
       clearTimeout(timeoutId);
 
-      if (!response.ok) {
-        throw new Error(\`API request failed: \${response.status} \${response.statusText}\`);
-      }
-
-      return response.json() as Promise<T>;
+      return response as Promise<T>;
     } catch (error) {
       clearTimeout(timeoutId);
       throw error;
@@ -165,15 +174,18 @@ export class RuntimeSDK {
    * Check API health
    */
   async healthCheck(): Promise<{ status: string }> {
-    const response = await fetch(\`\${this.baseUrl}/api/health\`, {
-      headers: this.token ? { Authorization: \`Bearer \${this.token}\` } : {},
-    });
+    const healthSchema = z.object({ status: z.string() });
 
-    if (!response.ok) {
-      throw new Error(\`Health check failed: \${response.status}\`);
-    }
+    const response = await safeFetch(
+      \`\${this.baseUrl}/api/health\`,
+      healthSchema,
+      {
+        method: 'GET',
+        headers: this.token ? { Authorization: \`Bearer \${this.token}\` } : {},
+      }
+    );
 
-    return response.json();
+    return response;
   }
 
   /**

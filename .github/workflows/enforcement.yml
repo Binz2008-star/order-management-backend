@@ -114,6 +114,18 @@ jobs:
       - name: Start application
         run: |
           npm run dev &
+
+      - name: Wait for application readiness
+        run: |
+          echo "Waiting for application to be ready..."
+          for i in {1..30}; do
+            if curl -fsS http://localhost:3000/api/health >/dev/null 2>&1; then
+              echo "Application is ready after $((i*2)) seconds"
+              break
+            fi
+            echo "Attempt $i/30: Application not ready, waiting 2 seconds..."
+            sleep 2
+          done
           sleep 15
 
       - name: Run contract tests
@@ -261,6 +273,18 @@ jobs:
       - name: Start application
         run: |
           npm run dev &
+
+      - name: Wait for application readiness
+        run: |
+          echo "Waiting for application to be ready..."
+          for i in {1..30}; do
+            if curl -fsS http://localhost:3000/api/health >/dev/null 2>&1; then
+              echo "Application is ready after $((i*2)) seconds"
+              break
+            fi
+            echo "Attempt $i/30: Application not ready, waiting 2 seconds..."
+            sleep 2
+          done
           sleep 15
 
       - name: Test request ID tracing
@@ -297,12 +321,14 @@ jobs:
                   console.log('PASS: Request ID tracing working:', requestId);
                   process.exit(0);
                 } else {
-                  console.log('FAIL: No request ID in response headers');
+                  console.log('FAIL: Request ID not found in headers');
                   process.exit(1);
                 }
               });
             });
 
+            req.on('error', (error) => {
+              console.log('FAIL: Request failed:', error.message);
             req.on('error', (err) => {
               console.log('FAIL: Request failed:', err.message);
               process.exit(1);
