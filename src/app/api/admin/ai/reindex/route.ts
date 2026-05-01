@@ -4,6 +4,31 @@ import { AiPolicyService } from '@/server/modules/ai/policy.service';
 import { PrismaClient } from '@prisma/client';
 import { NextRequest, NextResponse } from 'next/server';
 
+// Type definitions for database results
+interface ProductRow {
+  id: string;
+  name: string;
+  description: string | null;
+  category: string | null;
+  brand: string | null;
+  sku: string | null;
+  price: number;
+  currency: string;
+}
+
+interface DocumentChunk {
+  content: string;
+  chunkIndex: number;
+  documentId: string;
+  sellerId: string;
+  tokenCount: number;
+}
+
+interface ReindexPayload {
+  sourceType: string;
+  sourceId: string;
+}
+
 const prisma = new PrismaClient();
 const policyService = new AiPolicyService(prisma);
 const documentService = new DocumentService(prisma);
@@ -127,7 +152,7 @@ async function indexProducts(sellerId: string) {
     WHERE seller_id = ${sellerId}
   `;
 
-  for (const product of products as any[]) {
+  for (const product of products as ProductRow[]) {
     try {
       // Create AI document from product
       const document = await documentService.createDocumentFromSource(
@@ -140,7 +165,7 @@ async function indexProducts(sellerId: string) {
       const chunks = await documentService.chunkDocument(document.id);
 
       // Map chunks to expected format for storeEmbeddings
-      const mappedChunks = chunks.map((chunk: any) => ({
+      const mappedChunks = chunks.map((chunk: DocumentChunk) => ({
         content: chunk.content,
         index: chunk.chunkIndex,
         metadata: {
@@ -158,7 +183,7 @@ async function indexProducts(sellerId: string) {
   }
 }
 
-async function performDocumentUpsert(sellerId: string, payload: any) {
+async function performDocumentUpsert(sellerId: string, payload: ReindexPayload) {
   const { sourceType, sourceId } = payload;
 
   if (!sourceType || !sourceId) {
@@ -182,11 +207,11 @@ async function upsertProductDocument(sellerId: string, productId: string) {
     WHERE seller_id = ${sellerId} AND id = ${productId}
   `;
 
-  if (!product || (product as any[]).length === 0) {
+  if (!product || (product as ProductRow[]).length === 0) {
     throw new Error(`Product ${productId} not found`);
   }
 
-  const productData = (product as any[])[0];
+  const productData = (product as ProductRow[])[0];
 
   // Create or update AI document
   const document = await documentService.createDocumentFromSource(
@@ -199,7 +224,7 @@ async function upsertProductDocument(sellerId: string, productId: string) {
   const chunks = await documentService.chunkDocument(document.id);
 
   // Map chunks to expected format for storeEmbeddings
-  const mappedChunks = chunks.map((chunk: any) => ({
+  const mappedChunks = chunks.map((chunk: DocumentChunk) => ({
     content: chunk.content,
     index: chunk.chunkIndex,
     metadata: {
@@ -213,7 +238,7 @@ async function upsertProductDocument(sellerId: string, productId: string) {
   await embeddingService.storeEmbeddings(document.id, sellerId, mappedChunks);
 }
 
-async function performDocumentDelete(sellerId: string, payload: any) {
+async function performDocumentDelete(sellerId: string, payload: ReindexPayload) {
   const { sourceType, sourceId } = payload;
 
   if (!sourceType || !sourceId) {
