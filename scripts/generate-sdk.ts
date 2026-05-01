@@ -7,7 +7,7 @@ import { join } from "path";
 
 // === CONFIGURATION ===
 
-const OPENAPI_URL = "http://localhost:3000/api/openapi";
+const OPENAPI_FILE = join(__dirname, "../generated-openapi.json");
 const OUTPUT_DIR = join(__dirname, "../src/generated");
 const TYPES_FILE = join(OUTPUT_DIR, "runtime-api.ts");
 const SDK_FILE = join(OUTPUT_DIR, "runtime-sdk.ts");
@@ -19,7 +19,7 @@ function generateTypes() {
 
   try {
     // Generate types using openapi-typescript
-    execSync(`npx openapi-typescript ${OPENAPI_URL} -o ${TYPES_FILE}`, {
+    execSync(`npx openapi-typescript ${OPENAPI_FILE} -o ${TYPES_FILE}`, {
       stdio: "inherit",
     });
 

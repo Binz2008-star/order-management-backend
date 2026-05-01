@@ -37,7 +37,7 @@
     "generate-sdk": "tsx scripts/generate-sdk.ts",
     "generate-openapi": "tsx scripts/generate-openapi.ts",
     "enforce:gateway-only": "node scripts/enforce-gateway-only.js",
-    "test:contract": "vitest run src/tests/contract/order.contract.test.ts"
+    "test:contract": "vitest run src/tests/contract/"
   },
   "dependencies": {
     "@asteasolutions/zod-to-openapi": "8.5.0",
