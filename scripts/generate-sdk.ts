@@ -166,6 +166,7 @@ export class RuntimeSDK {
    */
   async healthCheck(): Promise<{ status: string }> {
     const response = await fetch(\`\${this.baseUrl}/api/health\`, {
+      method: 'GET',
       headers: this.token ? { Authorization: \`Bearer \${this.token}\` } : {},
     });
 

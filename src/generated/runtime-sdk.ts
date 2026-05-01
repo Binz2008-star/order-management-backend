@@ -16,7 +16,7 @@ export class RuntimeSDK {
   private readonly timeoutMs: number;
 
   constructor(options: RuntimeClientOptions) {
-    this.baseUrl = options.baseUrl.replace(/\/$/, "");
+    this.baseUrl = options.baseUrl.replace(//$/, "");
     this.token = options.token;
     this.timeoutMs = options.timeoutMs || 10000;
   }
@@ -94,7 +94,7 @@ export class RuntimeSDK {
   async getOrder(id: string): Promise<
     paths["/api/v1/orders/{id}"]["get"]["responses"]["200"]["content"]["application/json"]
   > {
-    return this.request(`/api/v1/orders/${id}` as any, "get");
+    return this.request(`/api/v1/orders/${id}`, "get");
   }
 
   /**
@@ -106,7 +106,7 @@ export class RuntimeSDK {
   ): Promise<
     paths["/api/v1/orders/{id}"]["put"]["responses"]["200"]["content"]["application/json"]
   > {
-    return this.request(`/api/v1/orders/${id}` as any, "put", { body: JSON.stringify(body) });
+    return this.request(`/api/v1/orders/${id}`, "put", { body: JSON.stringify(body) });
   }
 
   /**
@@ -118,7 +118,7 @@ export class RuntimeSDK {
   ): Promise<
     paths["/api/v1/orders/{id}/status"]["put"]["responses"]["200"]["content"]["application/json"]
   > {
-    return this.request(`/api/v1/orders/${id}/status` as any, "put", { body: JSON.stringify(body) });
+    return this.request(`/api/v1/orders/${id}/status`, "put", { body: JSON.stringify(body) });
   }
 
   // === UTILITY METHODS ===
@@ -128,6 +128,7 @@ export class RuntimeSDK {
    */
   async healthCheck(): Promise<{ status: string }> {
     const response = await fetch(`${this.baseUrl}/api/health`, {
+      method: 'GET',
       headers: this.token ? { Authorization: `Bearer ${this.token}` } : {},
     });
 
@@ -156,7 +157,8 @@ export class RuntimeSDK {
 // === TYPE EXPORTS ===
 
 export type {
-  components, paths
+  paths,
+  components,
 } from "./runtime-api";
 
 // === CONVENIENCE TYPES ===
