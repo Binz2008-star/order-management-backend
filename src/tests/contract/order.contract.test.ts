@@ -171,22 +171,30 @@ describe('Order API Contract Tests', () => {
         paymentType: 'INVALID_TYPE', // Invalid: not in enum
       };
 
-      const response = await fetch(`${TEST_BASE_URL}/api/v1/orders`, {
-        method: 'POST',
-        headers: {
-          'Authorization': `Bearer ${authToken}`,
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify(invalidOrderData),
-      });
+      const response = await safeFetch(
+        `${TEST_BASE_URL}/api/v1/orders`,
+        z.object({
+          success: z.literal(false),
+          error: z.object({
+            code: z.string(),
+            message: z.string(),
+          }),
+        }),
+        {
+          method: 'POST',
+          headers: {
+            'Authorization': `Bearer ${authToken}`,
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify(invalidOrderData),
+        }
+      );
 
-      expect(response.ok).toBe(false);
-      expect(response.status).toBe(400);
-
-      const json = await response.json();
+      expect(response.success).toBe(false);
+      expect(response.error.code).toBeDefined();
 
       // Error contract validation
-      const validated = ErrorSchema.parse(json);
+      const validated = ErrorSchema.parse(response);
       expect(validated.success).toBe(false);
       expect(validated.error.code).toBe('VALIDATION_ERROR');
       expect(validated.error.message).toBeDefined();
@@ -196,17 +204,32 @@ describe('Order API Contract Tests', () => {
 
   describe('GET /api/v1/orders - List Orders', () => {
     test('should return orders list with correct contract', async () => {
-      const response = await fetch(`${TEST_BASE_URL}/api/v1/orders?page=1&limit=10`, {
-        method: 'GET',
-        headers: {
-          'Authorization': `Bearer ${authToken}`,
-          'Content-Type': 'application/json',
-        },
-      });
+      const response = await safeFetch(
+        `${TEST_BASE_URL}/api/v1/orders?page=1&limit=10`,
+        z.object({
+          success: z.literal(true),
+          data: z.object({
+            orders: z.array(OrderResponseSchema),
+            pagination: z.object({
+              page: z.number(),
+              limit: z.number(),
+              total: z.number(),
+              totalPages: z.number(),
+              hasNext: z.boolean(),
+              hasPrev: z.boolean(),
+            }),
+          }),
+        }),
+        {
+          method: 'GET',
+          headers: {
+            'Authorization': `Bearer ${authToken}`,
+            'Content-Type': 'application/json',
+          },
+        }
+      );
 
-      expect(response.ok).toBe(true);
-
-      const json = await response.json();
+      const json = response;
 
       // Validate the structure matches expected contract
       expect(json).toHaveProperty('success', true);
@@ -230,18 +253,19 @@ describe('Order API Contract Tests', () => {
     });
 
     test('should validate query parameters correctly', async () => {
-      const response = await fetch(`${TEST_BASE_URL}/api/v1/orders?page=invalid&limit=999`, {
-        method: 'GET',
-        headers: {
-          'Authorization': `Bearer ${authToken}`,
-          'Content-Type': 'application/json',
-        },
-      });
+      const response = await safeFetch(
+        `${TEST_BASE_URL}/api/v1/orders?page=invalid&limit=999`,
+        ErrorSchema,
+        {
+          method: 'GET',
+          headers: {
+            'Authorization': `Bearer ${authToken}`,
+            'Content-Type': 'application/json',
+          },
+        }
+      );
 
-      expect(response.ok).toBe(false);
-      expect(response.status).toBe(400);
-
-      const json = await response.json();
+      const json = response;
 
       // Error contract validation
       const validated = ErrorSchema.parse(json);
@@ -253,45 +277,54 @@ describe('Order API Contract Tests', () => {
   describe('GET /api/v1/orders/:id - Get Single Order', () => {
     test('should return order with correct contract', async () => {
       // Create a fresh order for this test to ensure it exists
-      const createResponse = await fetch(`${TEST_BASE_URL}/api/v1/orders`, {
-        method: 'POST',
-        headers: {
-          'Authorization': `Bearer ${authToken}`,
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({
-          sellerId: 'seller_123',
-          customerId: 'customer_456',
-          items: [
-            {
-              productId: getValidTestProductId(),
-              quantity: 1,
-            },
-          ],
-          paymentType: 'CASH_ON_DELIVERY',
-          notes: 'Single order test',
-        }),
-      });
+      const createResponse = await safeFetch(
+        `${TEST_BASE_URL}/api/v1/orders`,
+        OrderCreateResponseSchema,
+        {
+          method: 'POST',
+          headers: {
+            'Authorization': `Bearer ${authToken}`,
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify({
+            sellerId: 'seller_123',
+            customerId: 'customer_456',
+            items: [
+              {
+                productId: getValidTestProductId(),
+                quantity: 1,
+              },
+            ],
+            paymentType: 'CASH_ON_DELIVERY',
+            notes: 'Single order test',
+          }),
+        }
+      );
 
-      expect(createResponse.ok).toBe(true);
-      const createData = await createResponse.json();
-      const orderId = createData.data.order.id;
+      const orderId = createResponse.data.order.id;
 
       // Track for cleanup
       createdOrderIds.push(orderId);
 
       // Now fetch the order we just created
-      const response = await fetch(`${TEST_BASE_URL}/api/v1/orders/${orderId}`, {
-        method: 'GET',
-        headers: {
-          'Authorization': `Bearer ${authToken}`,
-          'Content-Type': 'application/json',
-        },
-      });
+      const response = await safeFetch(
+        `${TEST_BASE_URL}/api/v1/orders/${orderId}`,
+        z.object({
+          success: z.literal(true),
+          data: z.object({
+            order: OrderResponseSchema,
+          }),
+        }),
+        {
+          method: 'GET',
+          headers: {
+            'Authorization': `Bearer ${authToken}`,
+            'Content-Type': 'application/json',
+          },
+        }
+      );
 
-      expect(response.ok).toBe(true);
-
-      const json = await response.json();
+      const json = response;
 
       // Contract validation
       expect(json).toHaveProperty('success', true);
@@ -303,18 +336,19 @@ describe('Order API Contract Tests', () => {
     });
 
     test('should return proper error for non-existent order', async () => {
-      const response = await fetch(`${TEST_BASE_URL}/api/v1/orders/non-existent-id`, {
-        method: 'GET',
-        headers: {
-          'Authorization': `Bearer ${authToken}`,
-          'Content-Type': 'application/json',
-        },
-      });
+      const response = await safeFetch(
+        `${TEST_BASE_URL}/api/v1/orders/non-existent-id`,
+        ErrorSchema,
+        {
+          method: 'GET',
+          headers: {
+            'Authorization': `Bearer ${authToken}`,
+            'Content-Type': 'application/json',
+          },
+        }
+      );
 
-      expect(response.ok).toBe(false);
-      expect(response.status).toBe(404);
-
-      const json = await response.json();
+      const json = response;
 
       // Error contract validation
       const validated = ErrorSchema.parse(json);
@@ -326,17 +360,25 @@ describe('Order API Contract Tests', () => {
   describe('Contract Stability Tests', () => {
     test('should maintain backward compatibility with V1 contract', async () => {
       // This test ensures we don't break V1 contract
-      const response = await fetch(`${TEST_BASE_URL}/api/v1/orders`, {
-        method: 'GET',
-        headers: {
-          'Authorization': `Bearer ${authToken}`,
-          'Content-Type': 'application/json',
-        },
-      });
+      const response = await safeFetch(
+        `${TEST_BASE_URL}/api/v1/orders`,
+        z.object({
+          success: z.literal(true),
+          data: z.object({
+            orders: z.array(z.any()),
+            pagination: z.any(),
+          }),
+        }),
+        {
+          method: 'GET',
+          headers: {
+            'Authorization': `Bearer ${authToken}`,
+            'Content-Type': 'application/json',
+          },
+        }
+      );
 
-      expect(response.ok).toBe(true);
-
-      const json = await response.json();
+      const json = response;
 
       // Verify V1 contract fields are present
       expect(json).toHaveProperty('success');
@@ -385,25 +427,25 @@ describe('Order API Contract Tests', () => {
       ];
 
       for (const endpoint of endpoints) {
-        const response = await fetch(`${TEST_BASE_URL}${endpoint.url}`, {
-          method: endpoint.method,
-          headers: {
-            'Authorization': `Bearer ${authToken}`,
-            'Content-Type': 'application/json',
-          },
-          body: endpoint.body ? JSON.stringify(endpoint.body) : undefined,
-        });
+        const response = await safeFetch(
+          `${TEST_BASE_URL}${endpoint.url}`,
+          ErrorSchema,
+          {
+            method: endpoint.method,
+            headers: {
+              'Authorization': `Bearer ${authToken}`,
+              'Content-Type': 'application/json',
+            },
+            body: endpoint.body ? JSON.stringify(endpoint.body) : undefined,
+          }
+        );
 
-        if (!response.ok) {
-          const json = await response.json();
-
-          // All errors should follow the same contract
-          const validated = ErrorSchema.parse(json);
-          expect(validated.success).toBe(false);
-          expect(validated.error).toHaveProperty('code');
-          expect(validated.error).toHaveProperty('message');
-          expect(validated.error).toHaveProperty('timestamp');
-        }
+        // All errors should follow the same contract
+        const validated = ErrorSchema.parse(response);
+        expect(validated.success).toBe(false);
+        expect(validated.error).toHaveProperty('code');
+        expect(validated.error).toHaveProperty('message');
+        expect(validated.error).toHaveProperty('timestamp');
       }
     });
   });
