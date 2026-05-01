@@ -1,7 +1,7 @@
 // Rate limiting store - no database transactions needed (Redis operations are atomic)
+import { safeFetch } from '@/shared/runtime-client/safe-fetch'
 import { NextRequest } from 'next/server'
 import { z } from 'zod'
-import { safeFetch } from '../../shared/runtime-client/safe-fetch'
 import { logger } from './logger'
 
 export type RateLimitFailurePolicy = 'fail-closed' | 'degrade-memory'
@@ -48,6 +48,10 @@ interface RedisClient {
   }
 }
 
+const upstashResponseSchema = <T extends z.ZodTypeAny>(resultSchema: T) => z.object({
+  result: resultSchema.optional(),
+  error: z.string().optional(),
+})
 
 export type RateLimitResponse =
   | {
@@ -129,24 +133,20 @@ class UpstashRestClient implements RedisClient {
     private readonly token: string
   ) { }
 
-  private async request<T>(command: string[], method: 'GET' | 'POST' = 'POST'): Promise<T> {
+  private async request<T>(
+    command: string[],
+    resultSchema: z.ZodType<T>,
+    method: 'GET' | 'POST' = 'POST'
+  ): Promise<T> {
     const encodedCommand = command.map((part) => encodeURIComponent(part)).join('/')
     const url = `${this.baseUrl}/${encodedCommand}`
 
-    // Use safeFetch for Upstash (internal service)
-    const payload = await safeFetch(
-      url,
-      z.object({
-        result: z.unknown(),
-        error: z.string().optional(),
-      }),
-      {
-        method,
-        headers: {
-          Authorization: `Bearer ${this.token}`,
-        },
-      }
-    )
+    const payload = await safeFetch(url, upstashResponseSchema(resultSchema), {
+      method,
+      headers: {
+        Authorization: `Bearer ${this.token}`,
+      },
+    })
 
     if (payload.error) {
       throw new Error(payload.error)
@@ -160,27 +160,30 @@ class UpstashRestClient implements RedisClient {
   }
 
   async get(key: string): Promise<string | null> {
-    return this.request<string | null>(['get', key], 'GET')
+    return this.request(['get', key], z.string().nullable(), 'GET')
   }
 
   async set(key: string, value: string, mode?: 'EX' | 'PX' | 'NX' | 'XX', duration?: number): Promise<string | null> {
     const command = ['set', key, value]
     if (mode) command.push(mode)
     if (typeof duration === 'number') command.push(duration.toString())
-    return this.request<string | null>(command)
+    return this.request(command, z.string().nullable())
   }
 
   async incr(key: string): Promise<number> {
-    return this.request<number>(['incr', key])
+    return this.request(['incr', key], z.number())
   }
 
   async expire(key: string, seconds: number): Promise<boolean> {
-    const result = await this.request<number>(['expire', key, seconds.toString()])
-    return result === 1
+    const result = await this.request(
+      ['expire', key, seconds.toString()],
+      z.union([z.boolean(), z.number()])
+    )
+    return result === true || result === 1
   }
 
   async del(key: string): Promise<number> {
-    return this.request<number>(['del', key])
+    return this.request(['del', key], z.number())
   }
 
   multi() {
@@ -194,13 +197,9 @@ class UpstashRestClient implements RedisClient {
         commands.push(['expire', key, seconds.toString()])
       },
       exec: async (): Promise<[number, boolean] | null> => {
-        // Use safeFetch for Upstash pipeline (internal service)
         const payload = await safeFetch(
           `${this.baseUrl}/pipeline`,
-          z.array(z.object({
-            result: z.number(),
-            error: z.string().optional(),
-          })),
+          z.array(upstashResponseSchema(z.number())),
           {
             method: 'POST',
             headers: {

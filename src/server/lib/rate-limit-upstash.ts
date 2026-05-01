@@ -1,9 +1,13 @@
 // Rate limiting store - no database transactions needed (Upstash operations are atomic)
-import { z } from 'zod'
-import { safeFetch } from '../../shared/runtime-client/safe-fetch'
+import { safeFetch } from '@/shared/runtime-client/safe-fetch'
 import { logger } from './logger'
 import { RateLimitResult, RateLimitStore } from './rate-limit-store'
+import { z } from 'zod'
 
+const upstashResponseSchema = <T extends z.ZodTypeAny>(resultSchema: T) => z.object({
+  result: resultSchema.optional(),
+  error: z.string().optional(),
+})
 
 class UpstashRestClient {
   constructor(
@@ -11,54 +15,62 @@ class UpstashRestClient {
     private readonly token: string
   ) { }
 
-  private async request<T>(command: string[], method: 'GET' | 'POST' = 'POST'): Promise<T> {
+  private async request<T>(
+    command: string[],
+    resultSchema: z.ZodType<T>,
+    method: 'GET' | 'POST' = 'POST'
+  ): Promise<T> {
     const encodedCommand = command.map((part) => encodeURIComponent(part)).join('/')
     const url = `${this.baseUrl}/${encodedCommand}`
 
-    // Use safeFetch for Upstash (internal service)
-    const data = await safeFetch(
-      url,
-      z.object({
-        result: z.unknown(),
-        error: z.string().optional(),
-      }),
-      {
-        method,
-        headers: {
-          Authorization: `Bearer ${this.token}`,
-        },
-      }
-    )
+    const data = await safeFetch(url, upstashResponseSchema(resultSchema), {
+      method,
+      headers: {
+        Authorization: `Bearer ${this.token}`,
+      },
+    })
 
     if (data.error) {
       throw new Error(`Upstash error: ${data.error}`)
     }
 
-    return data.result as T
+    if (typeof data.result === 'undefined') {
+      throw new Error('Upstash response did not include a result')
+    }
+
+    return data.result
   }
 
   async get(key: string): Promise<string | null> {
-    return this.request<string>(['GET', key])
+    return this.request(['GET', key], z.string().nullable())
   }
 
-  async set(key: string, value: string, mode?: 'EX' | 'PX', duration?: number): Promise<string | null> {
+  async set(key: string, value: string, options?: {
+    NX?: boolean
+    EX?: number
+    PX?: number
+  }): Promise<string | null> {
     const command = ['SET', key, value]
-    if (mode && duration) {
-      command.push(mode, duration.toString())
-    }
-    return this.request<string>(command)
+    if (options?.NX) command.push('NX')
+    if (options?.EX) command.push('EX', options.EX.toString())
+    if (options?.PX) command.push('PX', options.PX.toString())
+    return this.request(command, z.string().nullable())
   }
 
   async incr(key: string): Promise<number> {
-    return this.request<number>(['INCR', key])
+    return this.request(['INCR', key], z.number())
   }
 
   async expire(key: string, seconds: number): Promise<boolean> {
-    return this.request<boolean>(['EXPIRE', key, seconds.toString()])
+    const result = await this.request(
+      ['EXPIRE', key, seconds.toString()],
+      z.union([z.boolean(), z.number()])
+    )
+    return result === true || result === 1
   }
 
   async del(key: string): Promise<number> {
-    return this.request<number>(['DEL', key])
+    return this.request(['DEL', key], z.number())
   }
 }
 
@@ -119,9 +131,12 @@ export class UpstashRateLimitStore implements RateLimitStore {
       let currentCount: number
 
       // First try to set with expiry (only if not exists) - atomic
-      const setResult = await this.client.set(redisKey, '1', 'EX', windowSeconds)
+      const setResult = await this.client.set(redisKey, '1', {
+        NX: true,
+        EX: windowSeconds
+      })
 
-      if (setResult) {
+      if (setResult !== null) {
         // Key was newly created with expiry - atomic operation complete
         currentCount = 1
       } else {
