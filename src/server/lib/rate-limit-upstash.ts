@@ -1,11 +1,9 @@
 // Rate limiting store - no database transactions needed (Upstash operations are atomic)
+import { z } from 'zod'
+import { safeFetch } from '../../shared/runtime-client/safe-fetch'
 import { logger } from './logger'
 import { RateLimitResult, RateLimitStore } from './rate-limit-store'
 
-interface UpstashResponse<T> {
-  result?: T
-  error?: string
-}
 
 class UpstashRestClient {
   constructor(
@@ -17,18 +15,20 @@ class UpstashRestClient {
     const encodedCommand = command.map((part) => encodeURIComponent(part)).join('/')
     const url = `${this.baseUrl}/${encodedCommand}`
 
-    const response = await fetch(url, {
-      method,
-      headers: {
-        Authorization: `Bearer ${this.token}`,
-      },
-    })
-
-    if (!response.ok) {
-      throw new Error(`Upstash request failed with status ${response.status}`)
-    }
-
-    const data: UpstashResponse<T> = await response.json()
+    // Use safeFetch for Upstash (internal service)
+    const data = await safeFetch(
+      url,
+      z.object({
+        result: z.unknown(),
+        error: z.string().optional(),
+      }),
+      {
+        method,
+        headers: {
+          Authorization: `Bearer ${this.token}`,
+        },
+      }
+    )
 
     if (data.error) {
       throw new Error(`Upstash error: ${data.error}`)
@@ -119,43 +119,14 @@ export class UpstashRateLimitStore implements RateLimitStore {
       let currentCount: number
 
       // First try to set with expiry (only if not exists) - atomic
-      const setResponse = await fetch(`${this.config.baseUrl}/SET`, {
-        method: 'POST',
-        headers: {
-          'Authorization': `Bearer ${this.config.token}`,
-          'Content-Type': 'application/json'
-        },
-        body: JSON.stringify({
-          key: redisKey,
-          value: '1',
-          options: {
-            NX: true,
-            EX: windowSeconds
-          }
-        })
-      })
+      const setResult = await this.client.set(redisKey, '1', 'EX', windowSeconds)
 
-      if (setResponse.ok) {
+      if (setResult) {
         // Key was newly created with expiry - atomic operation complete
         currentCount = 1
       } else {
         // Key already exists, increment it - separate operation (race window here)
-        const incrResponse = await fetch(`${this.config.baseUrl}/INCR`, {
-          method: 'POST',
-          headers: {
-            'Authorization': `Bearer ${this.config.token}`,
-            'Content-Type': 'application/json'
-          },
-          body: JSON.stringify({
-            key: redisKey
-          })
-        })
-
-        if (!incrResponse.ok) {
-          throw new Error(`Upstash INCR failed with status ${incrResponse.status}`)
-        }
-
-        currentCount = await incrResponse.json() as number
+        currentCount = await this.client.incr(redisKey)
       }
 
       const allowed = currentCount <= limit

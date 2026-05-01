@@ -1,5 +1,7 @@
 // Rate limiting store - no database transactions needed (Redis operations are atomic)
 import { NextRequest } from 'next/server'
+import { z } from 'zod'
+import { safeFetch } from '../../shared/runtime-client/safe-fetch'
 import { logger } from './logger'
 
 export type RateLimitFailurePolicy = 'fail-closed' | 'degrade-memory'
@@ -46,10 +48,6 @@ interface RedisClient {
   }
 }
 
-interface UpstashResponse<T> {
-  result?: T
-  error?: string
-}
 
 export type RateLimitResponse =
   | {
@@ -135,18 +133,20 @@ class UpstashRestClient implements RedisClient {
     const encodedCommand = command.map((part) => encodeURIComponent(part)).join('/')
     const url = `${this.baseUrl}/${encodedCommand}`
 
-    const response = await fetch(url, {
-      method,
-      headers: {
-        Authorization: `Bearer ${this.token}`,
-      },
-    })
-
-    if (!response.ok) {
-      throw new Error(`Upstash request failed with status ${response.status}`)
-    }
-
-    const payload = await response.json() as UpstashResponse<T>
+    // Use safeFetch for Upstash (internal service)
+    const payload = await safeFetch(
+      url,
+      z.object({
+        result: z.unknown(),
+        error: z.string().optional(),
+      }),
+      {
+        method,
+        headers: {
+          Authorization: `Bearer ${this.token}`,
+        },
+      }
+    )
 
     if (payload.error) {
       throw new Error(payload.error)
@@ -156,7 +156,7 @@ class UpstashRestClient implements RedisClient {
       throw new Error('Upstash response did not include a result')
     }
 
-    return payload.result
+    return payload.result as T
   }
 
   async get(key: string): Promise<string | null> {
@@ -194,20 +194,22 @@ class UpstashRestClient implements RedisClient {
         commands.push(['expire', key, seconds.toString()])
       },
       exec: async (): Promise<[number, boolean] | null> => {
-        const response = await fetch(`${this.baseUrl}/pipeline`, {
-          method: 'POST',
-          headers: {
-            Authorization: `Bearer ${this.token}`,
-            'Content-Type': 'application/json',
-          },
-          body: JSON.stringify(commands),
-        })
-
-        if (!response.ok) {
-          throw new Error(`Upstash pipeline failed with status ${response.status}`)
-        }
-
-        const payload = await response.json() as Array<UpstashResponse<number>>
+        // Use safeFetch for Upstash pipeline (internal service)
+        const payload = await safeFetch(
+          `${this.baseUrl}/pipeline`,
+          z.array(z.object({
+            result: z.number(),
+            error: z.string().optional(),
+          })),
+          {
+            method: 'POST',
+            headers: {
+              Authorization: `Bearer ${this.token}`,
+              'Content-Type': 'application/json',
+            },
+            body: JSON.stringify(commands),
+          }
+        )
 
         if (!Array.isArray(payload) || payload.length !== commands.length) {
           throw new Error('Unexpected Upstash pipeline response')
