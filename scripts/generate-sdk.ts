@@ -65,12 +65,29 @@ export class RuntimeSDK {
     this.timeoutMs = options.timeoutMs || 10000;
   }
 
-  private async request<T>(
-    path: keyof paths,
-    method: keyof paths[keyof paths],
-    options?: RequestInit & { params?: Record<string, any> }
+  private buildPath(
+    templatePath: string,
+    pathParams?: Record<string, string | number>
+  ): string {
+    if (!pathParams) {
+      return templatePath;
+    }
+
+    return Object.entries(pathParams).reduce((resolvedPath, [key, value]) => {
+      return resolvedPath.replace(\`{\${key}}\`, encodeURIComponent(String(value)));
+    }, templatePath);
+  }
+
+  private async request<T, TPath extends keyof paths, TMethod extends keyof paths[TPath] & string>(
+    path: TPath,
+    method: TMethod,
+    options?: RequestInit & {
+      params?: Record<string, string | number | boolean | null | undefined>;
+      pathParams?: Record<string, string | number>;
+    }
   ): Promise<T> {
-    const url = new URL(\`\${this.baseUrl}\${path}\`, this.baseUrl);
+    const resolvedPath = this.buildPath(path, options?.pathParams);
+    const url = new URL(\`\${this.baseUrl}\${resolvedPath}\`, this.baseUrl);
 
     // Add query parameters
     if (options?.params) {
@@ -141,7 +158,9 @@ export class RuntimeSDK {
   async getOrder(id: string): Promise<
     paths["/api/v1/orders/{id}"]["get"]["responses"]["200"]["content"]["application/json"]
   > {
-    return this.request(\`/api/v1/orders/\${id}\`, "get");
+    return this.request("/api/v1/orders/{id}", "get", {
+      pathParams: { id },
+    });
   }
 
   /**
@@ -153,7 +172,10 @@ export class RuntimeSDK {
   ): Promise<
     paths["/api/v1/orders/{id}"]["put"]["responses"]["200"]["content"]["application/json"]
   > {
-    return this.request(\`/api/v1/orders/\${id}\`, "put", { body: JSON.stringify(body) });
+    return this.request("/api/v1/orders/{id}", "put", {
+      pathParams: { id },
+      body: JSON.stringify(body),
+    });
   }
 
   /**
@@ -165,7 +187,10 @@ export class RuntimeSDK {
   ): Promise<
     paths["/api/v1/orders/{id}/status"]["put"]["responses"]["200"]["content"]["application/json"]
   > {
-    return this.request(\`/api/v1/orders/\${id}/status\`, "put", { body: JSON.stringify(body) });
+    return this.request("/api/v1/orders/{id}/status", "put", {
+      pathParams: { id },
+      body: JSON.stringify(body),
+    });
   }
 
   // === UTILITY METHODS ===
@@ -213,7 +238,11 @@ export type {
 // === CONVENIENCE TYPES ===
 
 export type CreateOrderRequest = paths["/api/v1/orders"]["post"]["requestBody"]["content"]["application/json"];
-export type OrderResponse = paths["/api/v1/orders/{id}"]["get"]["responses"]["200"]["content"]["application/json"]["data"]["order"];
+export type OrderResponse = NonNullable<
+  NonNullable<
+    paths["/api/v1/orders/{id}"]["get"]["responses"]["200"]["content"]["application/json"]["data"]
+  >["order"]
+>;
 export type OrderListResponse = paths["/api/v1/orders"]["get"]["responses"]["200"]["content"]["application/json"];
 export type ErrorResponse = {
   success: false;
