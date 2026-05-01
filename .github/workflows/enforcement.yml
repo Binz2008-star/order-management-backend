@@ -126,6 +126,7 @@ jobs:
             echo "Attempt $i/30: Application not ready, waiting 2 seconds..."
             sleep 2
           done
+          sleep 15
 
       - name: Run contract tests
         run: npm run test:contract
@@ -205,6 +206,11 @@ jobs:
       - name: Install dependencies
         run: npm ci
 
+      - name: Start dev server
+        run: |
+          npm run dev &
+          sleep 10
+
       - name: Generate SDK
         run: npm run generate-sdk
 
@@ -279,6 +285,7 @@ jobs:
             echo "Attempt $i/30: Application not ready, waiting 2 seconds..."
             sleep 2
           done
+          sleep 15
 
       - name: Test request ID tracing
         run: |
@@ -322,6 +329,8 @@ jobs:
 
             req.on('error', (error) => {
               console.log('FAIL: Request failed:', error.message);
+            req.on('error', (err) => {
+              console.log('FAIL: Request failed:', err.message);
               process.exit(1);
             });
 
